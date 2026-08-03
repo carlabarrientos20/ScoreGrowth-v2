@@ -1,0 +1,23 @@
+# Credenciales y secretos
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Datos locales (no subir data sensible)
+data/*.csv
+data/*.xlsx
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/

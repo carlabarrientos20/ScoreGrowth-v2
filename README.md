@@ -33,7 +33,7 @@ Un mismo seller puede tener **dos scores separados**: uno en su negocio **duro**
 - DECO-HOGAR
 - TECNOLOGIA
 - ELECTRO-HOGAR
-- NUEVOS NEGOCIOS *(cuando no hay categoría)*
+- NUEVOS NEGOCIOS
 
 **Blandos**
 - ACCESORIOS
