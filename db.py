@@ -45,8 +45,6 @@ def run_query(sql: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    # Prueba rápida de conexión: si la VPN está activa y el .env correcto,
-    # esto imprime la fecha actual del servidor.
     df = run_query("SELECT CURRENT_DATE AS hoy")
     print("Conexión OK:")
     print(df)
