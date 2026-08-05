@@ -16,39 +16,46 @@ _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
 _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
 
 QUERY_VENTA = f"""
+-- sellers que ya pasaron los 90 días de onboarding
 WITH sellers_validos AS (
-    SELECT id AS seller_id, name 
-    FROM {TABLA_SELLERS}
-    WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
+    SELECT id AS seller_id, name
+    FROM eiffel_seller.seller
+    WHERE created_at <= DATEADD(day, -90, CURRENT_DATE)
 ),
 
+ -- venta por seller y por su división, en el horizonte de 3 meses cerrados
 ventas_seller AS (
     SELECT
         t.seller_id,
-        s.name AS seller_name,
+        s.name,
         CASE
-            WHEN t.division IN ({_duros_sql})   THEN 'duros'
-            WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
+            WHEN t.division IN ('DECO-HOGAR','TECNOLOGIA','ELECTRO-HOGAR','NUEVOS NEGOCIOS')
+                THEN 'duros'
+            WHEN t.division IN ('ACCESORIOS','DEPORTES','HOMBRES','MUJER','CALZADO','INFANTIL')
+                THEN 'blandos'
             ELSE 'otros'
-        END AS division,
+        END AS division_db,
         SUM(t.precio_venta) AS venta
-    FROM {TABLA_TRANSACCIONES} t
+    FROM cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
     INNER JOIN sellers_validos s
         ON t.seller_id = s.seller_id
     WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
       AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
-    GROUP BY t.seller_id, division, s.name
+    GROUP BY t.seller_id, division_db,name 
 )
 
 SELECT
     seller_id,
-    seller_name,
-    division,
+    name,
+    c.tier,
+    division_db,
     venta,
-    AVG(venta) OVER (PARTITION BY division) AS promedio_grupo,
-    ROUND(PERCENT_RANK() OVER (PARTITION BY division ORDER BY venta) * 100, 0) AS venta_percentil
+    AVG(venta)          OVER (PARTITION BY division_db) AS promedio_division,
+    PERCENT_RANK()      OVER (PARTITION BY division_db ORDER BY venta) AS percentil
 FROM ventas_seller
-ORDER BY division, venta DESC
+LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON seller_id = c.id_seller
+WHERE c.tier = 'Mid-Market'
+ORDER BY division_db, venta DESC
 """
 
 
