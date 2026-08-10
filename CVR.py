@@ -1,0 +1,96 @@
+"""
+Variable 2: Conversion (CVR)
+
+Calcula la tasa de conversion de cada seller en los ultimos 3 meses cerrados,
+clasificada por division (duros/blandos), y su percentil DENTRO de su division.
+
+La pregunta que responde es: "este seller convierte visitas -> ventas mas o
+menos que sus pares (mismo grupo de dureza)?" -> el percentil lo posiciona 0-100.
+
+CVR_seller = SUM(transacciones del seller) / SUM(visitas del seller)
+(se suma arriba y abajo y se divide al final; NO se promedian los CVR por producto)
+"""
+
+import pandas as pd
+from db import run_query
+from config import (TABLA_SELLERS, TABLA_TRANSACCIONES, DUROS, BLANDOS,
+                    DIAS_ONBOARDING, TABLA_VISTAS)
+
+_duros_sql = ", ".join(f"'{d}'" for d in DUROS)
+_blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
+
+QUERY_CVR = f"""
+WITH sellers_validos AS (
+    SELECT id AS seller_id, name, c.tier
+    FROM {TABLA_SELLERS}
+    LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
+    WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
+      AND c.tier = 'Mid-Market'
+      AND publish = 1
+),
+total_transacciones AS (
+    SELECT t.seller_id, s.name,
+        COUNT(oc) AS transacciones,
+        CASE
+            WHEN t.division IN ({_duros_sql})   THEN 'duros'
+            WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
+            ELSE 'otros'
+        END AS division_db
+    FROM {TABLA_TRANSACCIONES} t
+    INNER JOIN sellers_validos s
+        ON t.seller_id = s.seller_id
+    WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
+      AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
+    GROUP BY t.seller_id, division_db, s.name
+),
+numero_visitas AS (
+    SELECT c.seller_id, c.seller_name, SUM(d.pdp_views) AS total_visitas,
+        CASE
+            WHEN c.division IN ({_duros_sql})   THEN 'duros'
+            WHEN c.division IN ({_blandos_sql}) THEN 'blandos'
+            ELSE 'otros'
+        END AS division_db
+    FROM {TABLA_VISTAS} d
+    LEFT JOIN cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas c
+        ON c.sku_marketplace = d.product_id
+    WHERE d.date >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
+      AND d.date <  DATE_TRUNC('month', CURRENT_DATE)
+    GROUP BY c.seller_id, c.seller_name, division_db
+)
+SELECT
+    t.seller_id,
+    t.name,
+    t.division_db,
+    t.transacciones,
+    n.total_visitas,
+    ROUND(t.transacciones::decimal / NULLIF(n.total_visitas, 0) * 100, 2) || '%' AS cvr_seller,
+    ROUND(
+        PERCENT_RANK() OVER (
+            PARTITION BY t.division_db
+            ORDER BY t.transacciones::decimal / NULLIF(n.total_visitas, 0)
+        ) * 100, 0
+    ) AS percentil_cvr
+FROM total_transacciones t
+LEFT JOIN numero_visitas n
+    ON n.seller_id = t.seller_id
+   AND n.division_db = t.division_db
+"""
+
+
+def calcular() -> pd.DataFrame:
+    """Devuelve: seller_id, name, division_db, transacciones, total_visitas,
+    cvr_seller (texto con %), percentil_cvr (0-100 dentro de su dureza).
+
+    Clave: seller_id + division_db (un seller mixto aparece en dos filas).
+    """
+    return run_query(QUERY_CVR)
+
+
+if __name__ == "__main__":
+    df = calcular()
+    print(f"Filas (seller-division): {len(df)}")
+    print(f"Sellers unicos: {df['seller_id'].nunique()}")
+    print(f"  en duros:   {df[df['division_db'] == 'duros']['seller_id'].nunique()}")
+    print(f"  en blandos: {df[df['division_db'] == 'blandos']['seller_id'].nunique()}")
+    print(f"  en otros:   {df[df['division_db'] == 'otros']['seller_id'].nunique()}")
+    print(df.head(100))

@@ -5,6 +5,7 @@ Constantes del proyecto
 # --- Tablas en Redshift ---
 TABLA_SELLERS = "eiffel_seller.seller"
 TABLA_TRANSACCIONES = "cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp"
+TABLA_VISTAS = "source_bi_paristxd_product.product_data_daily"
 
 # --- Clasificación de divisiones en dureza ---
 DUROS = ["DECO-HOGAR", "TECNOLOGIA", "ELECTRO-HOGAR", "NUEVOS NEGOCIOS"]

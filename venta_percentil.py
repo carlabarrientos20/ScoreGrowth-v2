@@ -1,11 +1,11 @@
 """
 Variable 1: Venta.
 
-Calcula la venta total de cada seller en los últimos 3 meses cerrados,
-clasificada por división (duros/blandos), y su percentil DENTRO de su división.
+Calcula la venta total de cada seller en los ultimos 3 meses cerrados,
+clasificada por division (duros/blandos), y su percentil DENTRO de su dureza.
 
-La pregunta que responde: "¿este seller vende más o menos que sus pares
-(mismo grupo de división)?" -> el percentil lo posiciona de 0 a 100.
+La pregunta que responde: "este seller vende mas o menos que sus pares
+(mismo grupo de dureza)?" -> el percentil lo posiciona de 0 a 100.
 """
 
 import pandas as pd
@@ -16,16 +16,14 @@ _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
 _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
 
 QUERY_VENTA = f"""
-
--- sellers que ya pasaron los 90 días de onboarding
 WITH sellers_validos AS (
     SELECT id AS seller_id, name, c.tier
     FROM {TABLA_SELLERS}
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
-    WHERE created_at <= DATEADD(day, -90, CURRENT_DATE) AND c.tier = 'Mid-Market'
+    WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
+      AND c.tier = 'Mid-Market'
+      AND publish = 1
 ),
-
- -- venta por seller y por su división, en el horizonte de 3 meses cerrados
 ventas_seller AS (
     SELECT
         t.seller_id,
@@ -41,25 +39,24 @@ ventas_seller AS (
         ON t.seller_id = s.seller_id
     WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
       AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
-    GROUP BY t.seller_id, division_db,name 
+    GROUP BY t.seller_id, division_db, name
 )
-
 SELECT
     seller_id,
     name,
     division_db,
     venta,
-    AVG(venta)          OVER (PARTITION BY division_db) AS promedio_division,
-    PERCENT_RANK()      OVER (PARTITION BY division_db ORDER BY venta) AS percentil
+    AVG(venta) OVER (PARTITION BY division_db) AS promedio_division,
+    ROUND(PERCENT_RANK() OVER (PARTITION BY division_db ORDER BY venta) * 100, 0) AS venta_percentil
 FROM ventas_seller
-WHERE division_db = 'duros'
 ORDER BY division_db, venta DESC
-
 """
 
 
 def calcular() -> pd.DataFrame:
-    """Devuelve un DataFrame con: seller_id, division, venta, promedio_grupo, venta_percentil.
+    """Devuelve: seller_id, name, division_db, venta, promedio_division, venta_percentil.
+
+    Clave: seller_id + division_db (un seller mixto aparece en dos filas).
     """
     return run_query(QUERY_VENTA)
 
@@ -67,4 +64,8 @@ def calcular() -> pd.DataFrame:
 if __name__ == "__main__":
     df = calcular()
     print(f"Filas (seller-division): {len(df)}")
+    print(f"Sellers unicos: {df['seller_id'].nunique()}")
+    print(f"  en duros:   {df[df['division_db'] == 'duros']['seller_id'].nunique()}")
+    print(f"  en blandos: {df[df['division_db'] == 'blandos']['seller_id'].nunique()}")
+    print(f"  en otros:   {df[df['division_db'] == 'otros']['seller_id'].nunique()}")
     print(df.head(100))
