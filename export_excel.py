@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 
 
 # columnas de percentil (escala de color 0-100) -- nombres de la tabla LARGA
-COLS_PERCENTIL = ["venta_percentil", "percentil_cvr"]
+COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock"]
 # columnas de plata ($ con separador de miles)
 COLS_PLATA = ["venta", "total_invertido"]
 # columnas de porcentaje (margen_pct viene como fraccion 0-1)

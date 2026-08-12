@@ -10,20 +10,11 @@ Se distinguen DOS cosas que antes se confundian en "sin dato":
   - rentable: si tiene datos de rentabilidad EN EL HORIZONTE (may-jun-jul) y su
               margen es positivo. "sin dato" aqui = esta en el excel pero sin
               datos en esos meses, O no esta en el excel.
-  Cruzando ambas columnas se lee claro:
-    en_excel=no  + rentable=sin dato -> nunca cargado
-    en_excel=si  + rentable=sin dato -> cargado pero sin datos en el horizonte
-    en_excel=si  + rentable=si/no    -> cargado y con datos
-
-La rentabilidad NO se separa por dureza (el Sheet viene a nivel seller).
 
 Rentable = margen % > 0, con margen % = SUM(margen 3 meses) / SUM(venta_facturada 3 meses).
-Se suman los meses y se divide al final (NO se promedian los % mensuales).
 
 NOTA PILOTO: julio puede venir vacio en el Excel (aun no lo cargan). La suma
-ignora los NaN, asi que un seller con may-jun suma bien esos dos meses; el
-julio faltante no lo convierte en "sin dato". Cuando carguen julio, los montos
-subiran. Es esperado durante el piloto.
+ignora los NaN, asi que un seller con may-jun suma bien esos dos meses.
 """
 
 import pandas as pd
@@ -61,10 +52,8 @@ def leer_rentabilidad():
     """
     df = pd.read_csv(SHEET_URL)
 
-    # lista cruda de quien esta en el excel (antes de cualquier filtro)
     ids_en_excel = set(df["seller_id"].dropna().astype(str))
 
-    # limpiar formato de plata
     cols = df.columns.drop("seller_id")
     for c in cols:
         df[c] = (df[c].astype(str)
@@ -97,7 +86,7 @@ def calcular() -> pd.DataFrame:
     # columna en_excel: el seller_id aparece en el Sheet (en cualquier mes)?
     df["en_excel"] = df["seller_id"].astype(str).isin(ids_en_excel).map({True: "si", False: "no"})
 
-    # margen %, blindando division por cero
+    # margen %
     vf = df["venta_facturada"].replace(0, pd.NA)
     df["margen_pct"] = df["margen_nominal"] / vf
 
@@ -121,5 +110,7 @@ if __name__ == "__main__":
     print("\nDesglose de los 'sin dato':")
     sin_dato = df[df["rentable"] == "sin dato"]
     print(f"  estan en excel pero sin datos en el horizonte: {(sin_dato['en_excel'] == 'si').sum()}")
-    print(f"  NO estan en el excel:                          {(sin_dato['en_excel'] == 'no').sum()}")
-    print(df.head(20))
+    no_en_excel = df[df["en_excel"] == "no"]
+    print(f"Sellers que NO están en el Excel: {len(no_en_excel)}")
+    no_en_excel.to_csv("sellers_sin_rentabilidad.csv", index=False)
+    print("Guardados en sellers_sin_rentabilidad.csv")
