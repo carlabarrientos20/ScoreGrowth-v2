@@ -36,6 +36,9 @@ def exportar(df: pd.DataFrame, path: str = "score_growth.xlsx"):
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     cols = list(df.columns)
+    if len(df) == 0:
+        print("⚠️ DataFrame vacío, no se genera Excel. Alguna variable vino sin datos.")
+        return
 
     # encabezados
     for j, col in enumerate(cols, start=1):

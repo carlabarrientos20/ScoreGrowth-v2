@@ -55,7 +55,7 @@ sku_con_stock AS (
         COUNT(DISTINCT cat.sku_marketplace) AS sku_stock
     FROM {TABLA_CATALOGO} cat
     INNER JOIN sellers_validos s ON cat.seller_id = s.seller_id
-    WHERE cat.stock > 0
+    WHERE cat.stock > 0 and cat.approval_status = 'approved'
     GROUP BY cat.seller_id, division_db
 ),
 base AS (
