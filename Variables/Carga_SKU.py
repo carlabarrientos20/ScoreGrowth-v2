@@ -1,16 +1,22 @@
 """
-Variable 3: Productos con stock vs creados.
+Variable 3 y 6: Catalogo (disponibilidad + volumen).
 
-Para cada seller-dureza, calcula que porcentaje de sus SKU creados tienen
-stock (> 0), y su percentil DENTRO de su dureza.
+Para cada seller-dureza calcula DOS cosas de su catalogo:
 
-La pregunta: "este seller mantiene su catalogo disponible (con stock) mejor
-o peor que sus pares del mismo grupo?" -> el percentil lo posiciona 0-100.
+  1. % SKU con stock (disponibilidad / gestion):
+     pct_con_stock = SKU con stock / SKU creados
+     -> percentil_stock: ranking del % dentro de la dureza.
 
-pct_con_stock = SKU con stock / SKU creados  (por seller-dureza)
+  2. Volumen de SKU con stock (compromiso real con la plataforma):
+     sku_stock en numero absoluto
+     -> percentil_volumen_stock: ranking del VOLUMEN dentro de la dureza.
+
+Ambas comparten el ingrediente "SKU con stock" pero lo miran distinto: una como
+proporcion (gestiona bien lo que tiene) y otra como volumen (cuanto tiene). Un
+seller chico bien surtido gana en % pero pierde en volumen -> ya no se apalanca.
 
 Mismo universo que venta y CVR: Mid-Market + 90 dias + publish.
-Dureza via la columna division de la tabla de catalogo.
+SKU con stock = stock > 0 Y approval_status = 'approved'.
 """
 
 import pandas as pd
@@ -55,7 +61,7 @@ sku_con_stock AS (
         COUNT(DISTINCT cat.sku_marketplace) AS sku_stock
     FROM {TABLA_CATALOGO} cat
     INNER JOIN sellers_validos s ON cat.seller_id = s.seller_id
-    WHERE cat.stock > 0 and cat.approval_status = 'approved'
+    WHERE cat.stock > 0 AND cat.approval_status = 'approved'
     GROUP BY cat.seller_id, division_db
 ),
 base AS (
@@ -81,15 +87,19 @@ SELECT
     ROUND(pct_con_stock * 100, 2) || '%' AS pct_con_stock,
     ROUND(
         PERCENT_RANK() OVER (PARTITION BY division_db ORDER BY pct_con_stock) * 100, 0
-    ) AS percentil_stock
+    ) AS percentil_stock,
+    ROUND(
+        PERCENT_RANK() OVER (PARTITION BY division_db ORDER BY sku_stock) * 100, 0
+    ) AS percentil_volumen_stock
 FROM base
-ORDER BY division_db, pct_con_stock DESC
+ORDER BY division_db, sku_stock DESC
 """
 
 
 def calcular() -> pd.DataFrame:
     """Devuelve: seller_id, name, division_db, sku_creados, sku_stock,
-    pct_con_stock (texto con %), percentil_stock (0-100 dentro de su dureza).
+    pct_con_stock (texto %), percentil_stock (% disponibilidad, 0-100),
+    percentil_volumen_stock (volumen de SKU con stock, 0-100).
 
     Clave: seller_id + division_db.
     """
@@ -102,5 +112,4 @@ if __name__ == "__main__":
     print(f"Sellers unicos: {df['seller_id'].nunique()}")
     print(f"  en duros:   {df[df['division_db'] == 'duros']['seller_id'].nunique()}")
     print(f"  en blandos: {df[df['division_db'] == 'blandos']['seller_id'].nunique()}")
-    print(f"  en otros:   {df[df['division_db'] == 'otros']['seller_id'].nunique()}")
     print(df.head(100))

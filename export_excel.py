@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 
 
 # columnas de percentil (escala de color 0-100) -- nombres de la tabla LARGA
-COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock"]
+COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock", "percentil_volumen_stock", "score"]
 # columnas de plata ($ con separador de miles)
 COLS_PLATA = ["venta", "total_invertido"]
 # columnas de porcentaje (margen_pct viene como fraccion 0-1)
@@ -90,7 +90,6 @@ def exportar(df: pd.DataFrame, path: str = "score_growth.xlsx"):
 
     wb.save(path)
     print(f"Excel guardado en: {path}")
-
 
 if __name__ == "__main__":
     from main import tabla_larga

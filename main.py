@@ -50,8 +50,8 @@ def tabla_larga() -> pd.DataFrame:
     print("=== MERGE RENTABILIDAD + INVERSION + CARGA SKU ===")
     rent_cols = rent[["seller_id", "rentable", "margen_pct"]]
     inv_cols = inv[["seller_id", "invirtio", "total_invertido"]]
-    sku_cols = sku[["seller_id", "division_db", "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock"]]
-
+    sku_cols = sku[["seller_id", "division_db", "sku_creados", "sku_stock",
+                "pct_con_stock", "percentil_stock", "percentil_volumen_stock"]]
     # left join por seller: pega el mismo valor de rent/inv a las filas de duros y blandos
     df = df.merge(rent_cols, on="seller_id", how="left")
     df = df.merge(inv_cols, on="seller_id", how="left")
@@ -59,13 +59,21 @@ def tabla_larga() -> pd.DataFrame:
 
     # --- estado del seller (contexto) ---
     print("=== ESTADO DEL SELLER ===")
-    est = Estado.calcular()                       # seller_id, estado_seller
+    est = Estado.calcular()                      
     df = df.merge(est, on="seller_id", how="left")
     df["estado_seller"] = df["estado_seller"].fillna("Sin venta mes ref")
 
     print("=== TABLA LARGA CALCULADA ===")
     # ordenar para que las dos filas de cada seller (duros/blandos) queden juntas
     df = df.sort_values(["seller_id", "division_db"]).reset_index(drop=True)
+
+    orden = ["seller_id", "name", "estado_seller","division_db", "score",
+         "venta", "venta_percentil",
+         "cvr_seller", "percentil_cvr",
+         "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
+         "rentable", "margen_pct",
+         "invirtio", "total_invertido"]
+    df = df[[c for c in orden if c in df.columns]]
 
     return df
 
@@ -78,6 +86,14 @@ if __name__ == "__main__":
     print(f"Sellers unicos: {largo['seller_id'].nunique()}")
     print("\nDistribucion de estados:")
     print(largo.drop_duplicates("seller_id")["estado_seller"].value_counts())
+
+    orden = ["seller_id", "name", "estado_seller","division_db", "score",
+         "venta", "venta_percentil",
+         "cvr_seller", "percentil_cvr",
+         "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
+         "rentable", "margen_pct",
+         "invirtio", "total_invertido"]
+    largo = largo[[c for c in orden if c in largo.columns]]
 
     # guardar CSV crudo y el Excel formateado (tabla larga)
     print("=== GUARDANDO ARCHIVOS ===")

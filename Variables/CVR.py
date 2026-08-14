@@ -4,11 +4,12 @@ Variable 2: Conversion (CVR)
 Calcula la tasa de conversion de cada seller en los ultimos 3 meses cerrados,
 clasificada por division (duros/blandos), y su percentil DENTRO de su division.
 
-La pregunta que responde es: "este seller convierte visitas -> ventas mas o
-menos que sus pares (mismo grupo de dureza)?" -> el percentil lo posiciona 0-100.
-
 CVR_seller = SUM(transacciones del seller) / SUM(visitas del seller)
 (se suma arriba y abajo y se divide al final; NO se promedian los CVR por producto)
+
+Los sellers SIN visitas quedan fuera (no tienen CVR calculable). Asi no reciben
+un percentil falso de 100 ni distorsionan el percentil de los demas. Al cruzar
+en el score, esos sellers tendran percentil_cvr en NaN -> se tratan como neutral.
 """
 
 import pandas as pd
@@ -56,24 +57,22 @@ numero_visitas AS (
     WHERE d.date >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
       AND d.date <  DATE_TRUNC('month', CURRENT_DATE)
     GROUP BY c.seller_id, c.seller_name, division_db
+),
+con_cvr AS (
+    SELECT
+        t.seller_id, t.name, t.division_db,
+        t.transacciones, n.total_visitas,
+        t.transacciones::decimal / n.total_visitas AS cvr_valor
+    FROM total_transacciones t
+    INNER JOIN numero_visitas n
+        ON n.seller_id = t.seller_id AND n.division_db = t.division_db
+    WHERE n.total_visitas > 0
 )
 SELECT
-    t.seller_id,
-    t.name,
-    t.division_db,
-    t.transacciones,
-    n.total_visitas,
-    ROUND(t.transacciones::decimal / NULLIF(n.total_visitas, 0) * 100, 2) || '%' AS cvr_seller,
-    ROUND(
-        PERCENT_RANK() OVER (
-            PARTITION BY t.division_db
-            ORDER BY t.transacciones::decimal / NULLIF(n.total_visitas, 0)
-        ) * 100, 0
-    ) AS percentil_cvr
-FROM total_transacciones t
-LEFT JOIN numero_visitas n
-    ON n.seller_id = t.seller_id
-   AND n.division_db = t.division_db
+    seller_id, name, division_db, transacciones, total_visitas,
+    ROUND(cvr_valor * 100, 2) || '%' AS cvr_seller,
+    ROUND(PERCENT_RANK() OVER (PARTITION BY division_db ORDER BY cvr_valor) * 100, 0) AS percentil_cvr
+FROM con_cvr
 """
 
 
@@ -81,7 +80,7 @@ def calcular() -> pd.DataFrame:
     """Devuelve: seller_id, name, division_db, transacciones, total_visitas,
     cvr_seller (texto con %), percentil_cvr (0-100 dentro de su dureza).
 
-    Clave: seller_id + division_db (un seller mixto aparece en dos filas).
+    Solo sellers con visitas > 0. Clave: seller_id + division_db.
     """
     return run_query(QUERY_CVR)
 
