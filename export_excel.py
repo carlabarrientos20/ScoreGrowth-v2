@@ -21,6 +21,9 @@ COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock", "percen
 COLS_PLATA = ["venta", "total_invertido"]
 # columnas de porcentaje (margen_pct viene como fraccion 0-1)
 COLS_PCT = ["margen_pct"]
+# columnas con semaforo de rango variable (min-max real de la columna)
+# meses_vendidos no tiene tope fijo: depende de la ventana (3, 6, ...)
+COLS_SEMAFORO = ["meses_vendidos"]
 
 
 def exportar(df: pd.DataFrame, path: str = "score_growth.xlsx"):
@@ -64,10 +67,12 @@ def exportar(df: pd.DataFrame, path: str = "score_growth.xlsx"):
                 c.number_format = '0.0%'
             elif col in COLS_PERCENTIL and val is not None:
                 c.number_format = '0'
+            elif col in COLS_SEMAFORO and val is not None:
+                c.number_format = '0'
 
     n_filas = len(df) + 1
 
-    # escala de color en percentiles
+    # escala de color en percentiles (rango fijo 0-100)
     for col in COLS_PERCENTIL:
         if col in cols:
             letra = get_column_letter(cols.index(col) + 1)
@@ -76,6 +81,19 @@ def exportar(df: pd.DataFrame, path: str = "score_growth.xlsx"):
                 start_type="num", start_value=0, start_color="F8696B",
                 mid_type="num", mid_value=50, mid_color="FFEB84",
                 end_type="num", end_value=100, end_color="63BE7B",
+            )
+            ws.conditional_formatting.add(rango, regla)
+
+    # escala de color en semaforos (rango variable: min-max real de la columna)
+    # asi el verde siempre cae en el maximo real (3 meses, 6 meses, etc.)
+    for col in COLS_SEMAFORO:
+        if col in cols:
+            letra = get_column_letter(cols.index(col) + 1)
+            rango = f"{letra}2:{letra}{n_filas}"
+            regla = ColorScaleRule(
+                start_type="min", start_color="F8696B",
+                mid_type="percentile", mid_value=50, mid_color="FFEB84",
+                end_type="max", end_color="63BE7B",
             )
             ws.conditional_formatting.add(rango, regla)
 
