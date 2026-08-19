@@ -3,9 +3,6 @@ Variable 1: Venta.
 
 Calcula la venta total de cada seller en los ultimos 3 meses cerrados,
 clasificada por division (duros/blandos), y su percentil DENTRO de su dureza.
-
-La pregunta que responde: "este seller vende mas o menos que sus pares
-(mismo grupo de dureza)?" -> el percentil lo posiciona de 0 a 100.
 """
 
 import pandas as pd

@@ -6,8 +6,8 @@ Un estado unico por seller MID-MARKET, respecto al ULTIMO MES CERRADO
 
 Sellers que SI vendieron en el mes de referencia:
   - Primera venta:    su primera venta fue justo ese mes.
-  - Retenido Activo:  venia vendiendo seguido (tambien vendio el mes anterior).
-  - Reactivado:       vendio ese mes pero venia de un hueco (no vendio el mes anterior).
+  - Retenido Activo:  venia vendiendo seguido (también vendió el mes anterior).
+  - Reactivado:       vendió ese mes pero venia de un hueco (no vendió el mes anterior).
 
 Sellers que NO vendieron en el mes de referencia (apagados, por antiguedad
 de su ultima venta):
@@ -16,7 +16,6 @@ de su ultima venta):
   - Out <12:  ultima venta hace 6-12 meses.
   - Out >12:  ultima venta hace +12 meses.
 
-Filtro MM via cluster_seller, igual que venta y CVR (universo consistente).
 """
 
 import pandas as pd

@@ -4,10 +4,6 @@ Variable: Recurrencia de venta.
 Mide en cuantos meses  el seller efectivamente vendio.
 
   recurrencia = meses_con_venta / meses_totales_ventana   (valor 0.0 a 1.0)
-
-Es distinta de venta_percentil:
-  - venta_percentil = CUANTO vendio (nivel, corte actual)
-  - recurrencia     = EN CUANTOS MESES vendio (consistencia en el tiempo)
 """
 
 import pandas as pd

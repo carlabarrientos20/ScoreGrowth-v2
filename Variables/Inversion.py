@@ -7,10 +7,6 @@ Tabla final: seller_id | name | invirtio (si/no) | total_invertido
 - Los sellers validos (Mid-Market + 90 dias de onboarding)
   sale de Redshift, igual que venta y CVR.
 - Como son bases distintas, el cruce se hace en Python (merge).
-
-La inversion NO se separa por dureza: el campaignCharge es un cargo a
-nivel seller, sin division de producto. Por eso esta variable es a nivel
-seller completo (una fila por seller), no seller-dureza.
 """
 
 import pandas as pd

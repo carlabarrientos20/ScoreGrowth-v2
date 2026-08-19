@@ -2,15 +2,6 @@
 distribucion_score.py - Explora como se reparten los scores antes de segmentar,
 SEPARADO por dureza (duros / blandos).
 
-Un seller top en duros no es comparable con uno top en blandos, y los
-percentiles internos ya se calculan por dureza -> segmentar por separado
-es lo coherente. Este script genera estadisticas y un histograma por cada
-division_db.
-
-Cómo usarlo:
-  1. Deja este archivo al mismo nivel que score_growth.xlsx.
-  2. Corre: python distribucion_score.py
-  3. Mira los histogramas (score_distribucion_<dureza>.png) y las estadisticas.
 """
 
 import pandas as pd
@@ -89,7 +80,6 @@ for dureza in ["duros", "blandos"]:
     sub = df[df["division_db"] == dureza]
     analizar_dureza(sub, dureza)
 
-# opcional: avisar si hay filas en 'otros' que quedan fuera del analisis
 otros = df[~df["division_db"].isin(["duros", "blandos"])]
 if len(otros) > 0:
     print(f"\n(Nota: {len(otros)} filas con division_db distinto de duros/blandos "

@@ -4,17 +4,6 @@ Variable 4: Rentabilidad para el marketplace.
 Tabla final:
   seller_id | name | en_excel (si/no) | rentable (si/no/sin dato) | margen_pct | margen_nominal_3m
 
-Se distinguen DOS cosas que antes se confundian en "sin dato":
-  - en_excel: si el seller aparece en el Google Sheet (en cualquier mes).
-              "no" = nunca lo cargaron.
-  - rentable: si tiene datos de rentabilidad EN EL HORIZONTE (may-jun-jul) y su
-              margen es positivo. "sin dato" aqui = esta en el excel pero sin
-              datos en esos meses, O no esta en el excel.
-
-Rentable = margen % > 0, con margen % = SUM(margen 3 meses) / SUM(venta_facturada 3 meses).
-
-NOTA PILOTO: julio puede venir vacio en el Excel (aun no lo cargan). La suma
-ignora los NaN, asi que un seller con may-jun suma bien esos dos meses.
 """
 
 import pandas as pd

@@ -1,22 +1,6 @@
 """
 Variable 3 y 6: Catalogo (disponibilidad + volumen).
 
-Para cada seller-dureza calcula DOS cosas de su catalogo:
-
-  1. % SKU con stock (disponibilidad / gestion):
-     pct_con_stock = SKU con stock / SKU creados
-     -> percentil_stock: ranking del % dentro de la dureza.
-
-  2. Volumen de SKU con stock (compromiso real con la plataforma):
-     sku_stock en numero absoluto
-     -> percentil_volumen_stock: ranking del VOLUMEN dentro de la dureza.
-
-Ambas comparten el ingrediente "SKU con stock" pero lo miran distinto: una como
-proporcion (gestiona bien lo que tiene) y otra como volumen (cuanto tiene). Un
-seller chico bien surtido gana en % pero pierde en volumen -> ya no se apalanca.
-
-Mismo universo que venta y CVR: Mid-Market + 90 dias + publish.
-SKU con stock = stock > 0 Y approval_status = 'approved'.
 """
 
 import pandas as pd

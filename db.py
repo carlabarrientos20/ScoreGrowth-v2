@@ -9,20 +9,6 @@ Requiere:
   - VPN de Cencosud activa.
   - Un archivo .env en la carpeta con las credenciales de ambas bases.
 
-.env esperado:
-  # Redshift
-  REDSHIFT_HOST=...
-  REDSHIFT_PORT=5439
-  REDSHIFT_DB=...
-  REDSHIFT_USER=...
-  REDSHIFT_PASSWORD=...
-
-  # Postgres (eiffel-ledger)
-  PG_HOST=cl-mkp-eiffel-ledger.cluster-ro-...
-  PG_PORT=5432
-  PG_DB=postgres
-  PG_USER=ledger_user
-  PG_PASSWORD=...
 """
 
 import os
