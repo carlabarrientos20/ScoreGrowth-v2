@@ -14,3 +14,4 @@ BLANDOS = ["ACCESORIOS", "DEPORTES", "HOMBRES", "MUJER", "CALZADO", "INFANTIL"]
 # --- Parámetros del score ---
 DIAS_ONBOARDING = 90   # un seller entra al análisis tras 90 días de creado
 HORIZONTE_MESES = 3    # ventana de 3 meses cerrados 
+HORIZONTE_DIARIO = 90  #Cambio de granularidad temporal de meses a días para entregar la posibilidad de calcular el score de forma diaria

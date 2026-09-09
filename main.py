@@ -12,6 +12,9 @@ import Variables.Inversion as Inversion
 import Variables.Estado as Estado
 import Variables.Carga_SKU as Carga_SKU
 import Variables.Recurrencia_venta as Recurrencia
+import Variables.Reputacion as Reputacion
+from Tratamiento import escribir_hojas_tratamiento
+
 
 from export_excel import exportar
 from Perfil import perfilar, escribir_hoja_resumen, resumen_consola
@@ -28,7 +31,7 @@ def tabla_larga() -> pd.DataFrame:
     print("=== RECURRENCIA ===")
     rec = Recurrencia.calcular()
 
-    venta_cols = venta[["seller_id", "name", "division_db", "venta", "venta_percentil"]]
+    venta_cols = venta[["seller_id", "name", "admin_email", "division_db", "venta", "venta_percentil"]]
     cvr_cols = cvr[["seller_id", "division_db", "cvr_seller", "percentil_cvr"]]
     rec_cols = rec[["seller_id", "division_db", "meses_vendidos", "recurrencia"]]
 
@@ -55,10 +58,16 @@ def tabla_larga() -> pd.DataFrame:
     df = df.merge(est, on="seller_id", how="left")
     df["estado_seller"] = df["estado_seller"].fillna("Sin venta mes ref")
 
+    print("=== REPUTACIÓN DEL SELLER ===")
+    rep = Reputacion.calcular()
+    rep = rep.drop(columns=["name"], errors="ignore")   # evita colision con name de venta
+    df = df.merge(rep, on="seller_id", how="left")
+
     print("=== TABLA LARGA CALCULADA ===")
     df = df.sort_values(["seller_id", "division_db"]).reset_index(drop=True)
 
-    orden = ["seller_id", "name", "estado_seller", "division_db", "score",
+    orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
+             "division_db", "score",
          "venta", "venta_percentil",
          "meses_vendidos", "recurrencia",
          "cvr_seller", "percentil_cvr",
@@ -85,7 +94,8 @@ if __name__ == "__main__":
 
     resumen_consola(largo)
 
-    orden = ["seller_id", "name", "estado_seller", "division_db", "score", "segmento",
+    orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
+              "division_db", "score", "segmento",
          "venta", "venta_percentil",
          "meses_vendidos", "recurrencia",
          "cvr_seller", "percentil_cvr",
@@ -100,5 +110,7 @@ if __name__ == "__main__":
 
     print("=== AGREGANDO HOJA RESUMEN ===")
     escribir_hoja_resumen(largo, "score_growth.xlsx")
+    print("=== AGREGANDO HOJAS DE TRATAMIENTO ===")
+    escribir_hojas_tratamiento(largo, "score_growth.xlsx")
 
     print("\nListo: score_largo.csv y score_growth.xlsx (hojas: Score Growth + Resumen)")

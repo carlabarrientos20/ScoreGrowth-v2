@@ -22,7 +22,7 @@ _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
 
 QUERY_RECURRENCIA = f"""
 WITH sellers_validos AS (
-    SELECT id AS seller_id, name, c.tier
+    SELECT id AS seller_id, name, admin_email, c.tier
     FROM {TABLA_SELLERS}
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
     WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
@@ -33,6 +33,7 @@ meses_con_venta AS (
     SELECT
         t.seller_id,
         s.name,
+        s.admin_email,
         CASE
             WHEN t.division IN ({_duros_sql})   THEN 'duros'
             WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
@@ -44,11 +45,12 @@ meses_con_venta AS (
         ON t.seller_id = s.seller_id
     WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -{HORIZONTE_MESES}, CURRENT_DATE))
       AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
-    GROUP BY t.seller_id, division_db, name
+    GROUP BY t.seller_id, division_db, name, admin_email
 )
 SELECT
     seller_id,
     name,
+    admin_email,
     division_db,
     meses_vendidos,
     {HORIZONTE_MESES} AS meses_ventana,
@@ -59,7 +61,7 @@ ORDER BY division_db, recurrencia DESC
 
 
 def calcular() -> pd.DataFrame:
-    """Devuelve: seller_id, name, division_db, meses_vendidos, meses_ventana, recurrencia.
+    """Devuelve: seller_id, name, admin_email, division_db, meses_vendidos, meses_ventana, recurrencia.
 
     recurrencia va de 0.0 (nunca vendio) a 1.0 (vendio todos los meses).
     Para el score: aporte = recurrencia * PESO 
