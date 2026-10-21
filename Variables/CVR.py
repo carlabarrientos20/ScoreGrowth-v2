@@ -14,8 +14,8 @@ en el score, esos sellers tendran percentil_cvr en NaN -> se tratan como neutral
 
 import pandas as pd
 from db import run_query
-from config import (TABLA_SELLERS, TABLA_TRANSACCIONES, DUROS, BLANDOS,
-                    DIAS_ONBOARDING, TABLA_VISTAS)
+from config import (HORIZONTE_DIARIO, DUROS, BLANDOS,
+                    DIAS_ONBOARDING)
 
 _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
 _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
@@ -23,7 +23,7 @@ _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
 QUERY_CVR = f"""
 WITH sellers_validos AS (
     SELECT id AS seller_id, name, c.tier
-    FROM {TABLA_SELLERS}
+    FROM eiffel_seller.seller
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
     WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
       AND c.tier = 'Mid-Market'
@@ -37,11 +37,11 @@ total_transacciones AS (
             WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
             ELSE 'otros'
         END AS division_db
-    FROM {TABLA_TRANSACCIONES} t
+    FROM cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
     INNER JOIN sellers_validos s
         ON t.seller_id = s.seller_id
-    WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
-      AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
+    WHERE t.fecha_venta >= DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE)
+      AND t.fecha_venta <=  DATE_TRUNC('day', CURRENT_DATE)
     GROUP BY t.seller_id, division_db, s.name
 ),
 numero_visitas AS (
@@ -51,11 +51,11 @@ numero_visitas AS (
             WHEN c.division IN ({_blandos_sql}) THEN 'blandos'
             ELSE 'otros'
         END AS division_db
-    FROM {TABLA_VISTAS} d
+    FROM source_bi_paristxd_product.product_data_daily d
     LEFT JOIN cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas c
         ON c.sku_marketplace = d.product_id
-    WHERE d.date >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
-      AND d.date <  DATE_TRUNC('month', CURRENT_DATE)
+    WHERE d.date >= DATE_TRUNC('day', DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE))
+      AND d.date <= DATE_TRUNC('day', CURRENT_DATE)
     GROUP BY c.seller_id, c.seller_name, division_db
 ),
 con_cvr AS (

@@ -4,10 +4,14 @@ Estado del seller (CONTEXTO, no entra al score).
 Un estado unico por seller MID-MARKET, respecto al ULTIMO MES CERRADO
 (en agosto -> julio), alineado con el horizonte del resto de variables.
 
+Sellers que NUNCA vendieron:
+  - Ghost:      nunca creo productos (0 SKUs en catalogo).
+  - Sin venta:  tiene SKUs creados pero nunca ha vendido.
+
 Sellers que SI vendieron en el mes de referencia:
   - Primera venta:    su primera venta fue justo ese mes.
-  - Retenido Activo:  venia vendiendo seguido (también vendió el mes anterior).
-  - Reactivado:       vendió ese mes pero venia de un hueco (no vendió el mes anterior).
+  - Activo:           venia vendiendo seguido (tambien vendio el mes anterior).
+  - Reactivado:       vendio ese mes pero venia de un hueco (no vendio el mes anterior).
 
 Sellers que NO vendieron en el mes de referencia (apagados, por antiguedad
 de su ultima venta):
@@ -15,7 +19,6 @@ de su ultima venta):
   - Fugado:   ultima venta hace 3-6 meses.
   - Out <12:  ultima venta hace 6-12 meses.
   - Out >12:  ultima venta hace +12 meses.
-
 """
 
 import pandas as pd
@@ -23,7 +26,7 @@ from db import run_query
 
 QUERY_ESTADO = """
 WITH mm AS (
-    SELECT id_seller
+    SELECT DISTINCT id_seller
     FROM cencosud_chile_txd_reporter.cluster_seller
     WHERE tier = 'Mid-Market'
 ),
@@ -46,43 +49,64 @@ resumen AS (
         vpm.seller_id,
         MIN(vpm.mes_venta) AS primera_venta,
         MAX(vpm.mes_venta) AS ultima_venta,
-        -- vendio en el mes de referencia?
         MAX(CASE WHEN vpm.mes_venta = p.mes_sel THEN 1 ELSE 0 END) AS vendio_sel,
-        -- vendio en el mes anterior al de referencia?
         MAX(CASE WHEN vpm.mes_venta = p.mes_ant THEN 1 ELSE 0 END) AS vendio_ant
     FROM ventas_por_mes vpm
     CROSS JOIN params p
     GROUP BY vpm.seller_id
+),
+skus AS (
+    -- SKUs creados por seller (cualquier estado de publicacion)
+    SELECT
+        c.seller_id,
+        COUNT(DISTINCT c.sku_marketplace) AS n_skus
+    FROM cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas c
+    INNER JOIN mm ON c.seller_id = mm.id_seller
+    GROUP BY c.seller_id
 )
 SELECT
-    r.seller_id,
+    mm.id_seller AS seller_id,
     CASE
+        -- --- nunca vendieron ---
+        WHEN r.seller_id IS NULL AND COALESCE(s.n_skus, 0) = 0 THEN 'Ghost'
+        WHEN r.seller_id IS NULL THEN 'Sin venta'
         -- --- vendieron en el mes de referencia ---
         WHEN r.vendio_sel = 1 AND r.primera_venta = p.mes_sel THEN 'Primera venta'
         WHEN r.vendio_sel = 1 AND r.vendio_ant = 1 THEN 'Activo'
         WHEN r.vendio_sel = 1 AND r.vendio_ant = 0 THEN 'Reactivado'
         -- --- NO vendieron en el mes de referencia (apagados) ---
-        -- ultima_venta se mide contra mes_sel: hace cuantos meses fue
-        WHEN r.vendio_sel = 0 AND r.ultima_venta >= DATEADD(month, -2, p.mes_sel) THEN 'Dormant'
-        WHEN r.vendio_sel = 0 AND r.ultima_venta >= DATEADD(month, -6, p.mes_sel) THEN 'Fugado'
-        WHEN r.vendio_sel = 0 AND r.ultima_venta >= DATEADD(month, -12, p.mes_sel) THEN 'Out <12'
-        WHEN r.vendio_sel = 0 AND r.ultima_venta <  DATEADD(month, -12, p.mes_sel) THEN 'Out >12'
+        WHEN r.ultima_venta >= DATEADD(month, -2, p.mes_sel)  THEN 'Dormant'
+        WHEN r.ultima_venta >= DATEADD(month, -6, p.mes_sel)  THEN 'Fugado'
+        WHEN r.ultima_venta >= DATEADD(month, -12, p.mes_sel) THEN 'Out <12'
+        WHEN r.ultima_venta <  DATEADD(month, -12, p.mes_sel) THEN 'Out >12'
         ELSE 'Otro'
-    END AS estado_seller
-FROM resumen r
+    END AS estado_seller,
+    COALESCE(s.n_skus, 0) AS n_skus_chequeo
+FROM mm
+LEFT JOIN resumen r ON r.seller_id = mm.id_seller
+LEFT JOIN skus    s ON s.seller_id = mm.id_seller
 CROSS JOIN params p
 """
 
 
 def calcular() -> pd.DataFrame:
     """Devuelve: seller_id, estado_seller (una fila por seller MM)."""
-    return run_query(QUERY_ESTADO)
+    df = run_query(QUERY_ESTADO)
+    return df[["seller_id", "estado_seller"]]
 
 
 if __name__ == "__main__":
-    df = calcular()
-    print(f"Sellers MM clasificados: {len(df)}")
+    df_full = run_query(QUERY_ESTADO)
+    print(f"Sellers MM clasificados: {len(df_full)}")
     print("\nDistribucion de estados:")
-    print(df["estado_seller"].value_counts())
-    print()
-    print(df.head(20))
+    print(df_full["estado_seller"].value_counts())
+
+    # Sanity check: sellers con ventas pero 0 SKUs en catalogo.
+    # Si salen muchos, la tabla de replicas no guarda historico
+    # y el Ghost podria estar inflado.
+    raros = df_full[
+        (~df_full["estado_seller"].isin(["Ghost", "Sin venta"]))
+        & (df_full["n_skus_chequeo"] == 0)
+    ]
+    print(f"\nSellers con venta pero 0 SKUs en catalogo: {len(raros)}")
+    print(raros.head(20))

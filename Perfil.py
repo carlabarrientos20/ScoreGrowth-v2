@@ -40,7 +40,7 @@ def clasificar_segmento(score: float) -> str:
 # ======================================================================
 UMBRAL_PERCENTIL = 40
 UMBRAL_PERCENTIL_SKU = 60
-UMBRAL_RECURRENCIA = 2.0
+UMBRAL_RECURRENCIA = 1.0
 
 
 FLAGS = ["flag_venta_baja", "flag_stock_bajo", "flag_catalogo_bajo",
@@ -137,7 +137,7 @@ def perfilar(df: pd.DataFrame) -> pd.DataFrame:
     df["flag_stock_bajo"]    = df["percentil_stock"] < UMBRAL_PERCENTIL_SKU
     df["flag_catalogo_bajo"] = df["percentil_volumen_stock"] < UMBRAL_PERCENTIL_SKU
     df["flag_cvr_bajo"]      = df["percentil_cvr"] < UMBRAL_PERCENTIL
-    df["flag_intermitente"]  = df["meses_vendidos"] < UMBRAL_RECURRENCIA
+    df["flag_intermitente"]  = df["dias_vendidos"] < UMBRAL_RECURRENCIA
     df["flag_sin_inversion"] = df["invirtio"].astype(str).str.lower() == "no"
     for f in FLAGS:
         df[f] = df[f].fillna(False)

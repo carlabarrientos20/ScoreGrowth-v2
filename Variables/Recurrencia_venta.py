@@ -9,12 +9,10 @@ Mide en cuantos meses  el seller efectivamente vendio.
 import pandas as pd
 from db import run_query
 from config import (
-    TABLA_SELLERS,
-    TABLA_TRANSACCIONES,
+    HORIZONTE_DIARIO,
     DUROS,
     BLANDOS,
-    DIAS_ONBOARDING,
-    HORIZONTE_MESES
+    DIAS_ONBOARDING
 )
 
 _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
@@ -22,8 +20,8 @@ _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
 
 QUERY_RECURRENCIA = f"""
 WITH sellers_validos AS (
-    SELECT id AS seller_id, name, admin_email, c.tier
-    FROM {TABLA_SELLERS}
+    SELECT id AS seller_id, name, c.tier
+    FROM eiffel_seller.seller
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
     WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
       AND c.tier = 'Mid-Market'
@@ -33,35 +31,33 @@ meses_con_venta AS (
     SELECT
         t.seller_id,
         s.name,
-        s.admin_email,
         CASE
             WHEN t.division IN ({_duros_sql})   THEN 'duros'
             WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
             ELSE 'otros'
         END AS division_db,
-        COUNT(DISTINCT DATE_TRUNC('month', t.fecha_venta)) AS meses_vendidos
-    FROM {TABLA_TRANSACCIONES} t
+        COUNT(DISTINCT DATE_TRUNC('day', t.fecha_venta)) AS dias_vendidos
+    FROM cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
     INNER JOIN sellers_validos s
         ON t.seller_id = s.seller_id
-    WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -{HORIZONTE_MESES}, CURRENT_DATE))
-      AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
-    GROUP BY t.seller_id, division_db, name, admin_email
+    WHERE t.fecha_venta >= DATE_TRUNC('day', DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE))
+      AND t.fecha_venta <  DATE_TRUNC('day', CURRENT_DATE)
+    GROUP BY t.seller_id, division_db, name
 )
 SELECT
     seller_id,
     name,
-    admin_email,
     division_db,
-    meses_vendidos,
-    {HORIZONTE_MESES} AS meses_ventana,
-    ROUND(meses_vendidos::numeric / {HORIZONTE_MESES}, 3) AS recurrencia
+    dias_vendidos,
+    {HORIZONTE_DIARIO} AS dias_ventana,
+    ROUND(dias_vendidos::numeric / {HORIZONTE_DIARIO}, 3) AS recurrencia
 FROM meses_con_venta
 ORDER BY division_db, recurrencia DESC
 """
 
 
 def calcular() -> pd.DataFrame:
-    """Devuelve: seller_id, name, admin_email, division_db, meses_vendidos, meses_ventana, recurrencia.
+    """Devuelve: seller_id, name, division_db, meses_vendidos, meses_ventana, recurrencia.
 
     recurrencia va de 0.0 (nunca vendio) a 1.0 (vendio todos los meses).
     Para el score: aporte = recurrencia * PESO 
@@ -71,9 +67,9 @@ def calcular() -> pd.DataFrame:
 
 if __name__ == "__main__":
     df = calcular()
-    print(f"Ventana: {HORIZONTE_MESES} meses")
+    print(f"Ventana: {HORIZONTE_DIARIO} días")
     print(f"Filas (seller-division): {len(df)}")
     print(f"Sellers unicos: {df['seller_id'].nunique()}")
     print("\nDistribucion de recurrencia:")
-    print(df["recurrencia"].value_counts().sort_index())
+    print(df["recurrencia"].describe())
     print("\n", df.head(50))

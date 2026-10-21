@@ -11,6 +11,7 @@ Tabla final: seller_id | name | invirtio (si/no) | total_invertido
 
 import pandas as pd
 from db import run_query, run_query_pg
+from config import HORIZONTE_DIARIO
 
 QUERY_SELLERS_VALIDOS = """
 SELECT s.id AS seller_id, s.name
@@ -20,7 +21,7 @@ WHERE s.created_at <= DATEADD(day, -90, CURRENT_DATE)
   AND c.tier = 'Mid-Market' AND publish = 1
 """
 
-QUERY_INVERSION = """
+QUERY_INVERSION = f"""
 SELECT
     i.seller_id,
     SUM(id.amount) AS total_invertido
@@ -28,9 +29,9 @@ FROM "eiffel-ledger".invoice i
 INNER JOIN "eiffel-ledger".invoice_detail id ON i.id = id.invoice_id
 WHERE id.type = 'campaignCharge'
   AND (i.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santiago')::date
-      >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '3 months')
+      >= CURRENT_DATE - {HORIZONTE_DIARIO}
   AND (i.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santiago')::date
-      <  DATE_TRUNC('month', CURRENT_DATE)
+      <  CURRENT_DATE
 GROUP BY i.seller_id
 """
 

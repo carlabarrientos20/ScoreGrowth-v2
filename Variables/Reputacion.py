@@ -5,13 +5,13 @@ Variables: Reputación del seller, esta debe ser Medio y destacado para que pued
 
 import pandas as pd
 from db import run_query
-from config import TABLA_SELLERS, DIAS_ONBOARDING
+from config import DIAS_ONBOARDING
 
 QUERY_REPUTACION = f"""
 
 WITH sellers_validos AS (
     SELECT id AS seller_id, name, c.tier
-    FROM {TABLA_SELLERS} 
+    FROM eiffel_seller.seller
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
     WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
       AND c.tier = 'Mid-Market'

@@ -7,15 +7,15 @@ clasificada por division (duros/blandos), y su percentil DENTRO de su dureza.
 
 import pandas as pd
 from db import run_query
-from config import TABLA_SELLERS, TABLA_TRANSACCIONES, DUROS, BLANDOS, DIAS_ONBOARDING
+from config import DUROS, BLANDOS, DIAS_ONBOARDING, HORIZONTE_DIARIO
 
 _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
 _blandos_sql = ", ".join(f"'{b}'" for b in BLANDOS)
 
 QUERY_VENTA = f"""
 WITH sellers_validos AS (
-    SELECT id AS seller_id, name, c.tier
-    FROM {TABLA_SELLERS}
+    SELECT id AS seller_id, name, admin_email, c.tier
+    FROM eiffel_seller.seller
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
     WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
       AND c.tier = 'Mid-Market'
@@ -23,24 +23,26 @@ WITH sellers_validos AS (
 ),
 ventas_seller AS (
     SELECT
-        t.seller_id,
+        s.seller_id,
         s.name,
+        s.admin_email,
         CASE
             WHEN t.division IN ({_duros_sql})   THEN 'duros'
             WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
             ELSE 'otros'
         END AS division_db,
-        SUM(t.precio_venta) AS venta
-    FROM {TABLA_TRANSACCIONES} t
-    INNER JOIN sellers_validos s
+        COALESCE(SUM(t.precio_venta), 0) AS venta
+    FROM sellers_validos s
+    LEFT JOIN cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
         ON t.seller_id = s.seller_id
-    WHERE t.fecha_venta >= DATE_TRUNC('month', DATEADD(month, -3, CURRENT_DATE))
-      AND t.fecha_venta <  DATE_TRUNC('month', CURRENT_DATE)
-    GROUP BY t.seller_id, division_db, name
+    WHERE t.fecha_venta >= DATE_TRUNC('day', DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE))
+            AND t.fecha_venta <  DATE_TRUNC('day', CURRENT_DATE)
+    GROUP BY s.seller_id, s.name, s.admin_email, division_db
 )
 SELECT
     seller_id,
     name,
+    admin_email,
     division_db,
     venta,
     AVG(venta) OVER (PARTITION BY division_db) AS promedio_division,
@@ -51,7 +53,7 @@ ORDER BY division_db, venta DESC
 
 
 def calcular() -> pd.DataFrame:
-    """Devuelve: seller_id, name, division_db, venta, promedio_division, venta_percentil.
+    """Devuelve: seller_id, name, admin_email, division_db, venta, promedio_division, venta_percentil.
 
     Clave: seller_id + division_db (un seller mixto aparece en dos filas).
     """

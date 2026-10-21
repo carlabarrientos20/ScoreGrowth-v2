@@ -33,7 +33,7 @@ def tabla_larga() -> pd.DataFrame:
 
     venta_cols = venta[["seller_id", "name", "admin_email", "division_db", "venta", "venta_percentil"]]
     cvr_cols = cvr[["seller_id", "division_db", "cvr_seller", "percentil_cvr"]]
-    rec_cols = rec[["seller_id", "division_db", "meses_vendidos", "recurrencia"]]
+    rec_cols = rec[["seller_id", "division_db", "dias_vendidos", "recurrencia"]]
 
     print("=== MERGE VENTA + CVR + RECURRENCIA ===")
     df = venta_cols.merge(cvr_cols, on=["seller_id", "division_db"], how="outer")
@@ -56,7 +56,7 @@ def tabla_larga() -> pd.DataFrame:
     print("=== ESTADO DEL SELLER ===")
     est = Estado.calcular()
     df = df.merge(est, on="seller_id", how="left")
-    df["estado_seller"] = df["estado_seller"].fillna("Sin venta mes ref")
+    df["estado_seller"] = df["estado_seller"].fillna("No clasificado")
 
     print("=== REPUTACIÓN DEL SELLER ===")
     rep = Reputacion.calcular()
@@ -69,7 +69,7 @@ def tabla_larga() -> pd.DataFrame:
     orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
              "division_db", "score",
          "venta", "venta_percentil",
-         "meses_vendidos", "recurrencia",
+         "dias_vendidos", "recurrencia",
          "cvr_seller", "percentil_cvr",
          "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
          "invirtio", "total_invertido"]
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
               "division_db", "score", "segmento",
          "venta", "venta_percentil",
-         "meses_vendidos", "recurrencia",
+         "dias_vendidos", "recurrencia",
          "cvr_seller", "percentil_cvr",
          "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
          "invirtio", "total_invertido"]

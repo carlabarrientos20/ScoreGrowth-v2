@@ -15,7 +15,7 @@ TABLA_CATALOGO = "cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_repl
 QUERY_PRODUCTOS = f"""
 WITH sellers_validos AS (
     SELECT id AS seller_id, name
-    FROM {TABLA_SELLERS}
+    FROM eiffel_seller.seller
     LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON id = c.id_seller
     WHERE created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
       AND c.tier = 'Mid-Market'
@@ -23,16 +23,16 @@ WITH sellers_validos AS (
 ),
 cant_sku_creados AS (
     SELECT
-        cat.seller_id,
+        sv.seller_id,
         CASE
             WHEN cat.division IN ({_duros_sql})   THEN 'duros'
             WHEN cat.division IN ({_blandos_sql}) THEN 'blandos'
             ELSE 'otros'
         END AS division_db,
         COUNT(DISTINCT cat.sku_marketplace) AS sku_creados
-    FROM {TABLA_CATALOGO} cat
-    INNER JOIN sellers_validos s ON cat.seller_id = s.seller_id
-    GROUP BY cat.seller_id, division_db
+    FROM sellers_validos sv
+    LEFT JOIN cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas cat ON cat.seller_id = sv.seller_id
+    GROUP BY sv.seller_id, division_db
 ),
 sku_con_stock AS (
     SELECT
@@ -43,7 +43,7 @@ sku_con_stock AS (
             ELSE 'otros'
         END AS division_db,
         COUNT(DISTINCT cat.sku_marketplace) AS sku_stock
-    FROM {TABLA_CATALOGO} cat
+    FROM cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas cat
     INNER JOIN sellers_validos s ON cat.seller_id = s.seller_id
     WHERE cat.stock > 0 AND cat.approval_status = 'approved'
     GROUP BY cat.seller_id, division_db
@@ -68,7 +68,7 @@ SELECT
     division_db,
     sku_creados,
     sku_stock,
-    ROUND(pct_con_stock * 100, 2) || '%' AS pct_con_stock,
+    COALESCE(ROUND(pct_con_stock * 100, 2) || '%', '0%') AS pct_con_stock,
     ROUND(
         PERCENT_RANK() OVER (PARTITION BY division_db ORDER BY pct_con_stock) * 100, 0
     ) AS percentil_stock,

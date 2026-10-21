@@ -39,15 +39,16 @@ from openpyxl.utils import get_column_letter
 
 # ---- parametros de los criterios (editar aca si cambian) ----
 REPUTACION_OK = ["Bueno", "Destacado", "Plan Growth"]
+REPUTACION_SP = ["Medio","Bueno", "Destacado", "Plan Growth"]
 SKU_MIN = 5
-MESES_MIN_DORMANT = 2
-MESES_MIN_ACTIVO = 3
+DIAS_MIN_DORMANT = 60  # Aproximadamente 2 meses
+DIAS_MIN_ACTIVO = 90  # Aproximadamente 3 meses
 PERCENTIL_CVR_MIN = 60
 
-COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "categoria_reputacion",
+COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "admin_email", "categoria_reputacion",
                     "division_db", "score", "segmento",
                     "venta", "venta_percentil",
-                    "meses_vendidos", "recurrencia",
+                    "dias_vendidos", "recurrencia",
                     "cvr_seller", "percentil_cvr",
                     "sku_creados", "sku_stock", "pct_con_stock",
                     "percentil_stock", "percentil_volumen_stock",
@@ -56,14 +57,14 @@ COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "categoria_reputacion"
 
 def filtrar_sp(df: pd.DataFrame) -> pd.DataFrame:
     """Sellers que reciben regalo de Sponsored Products (Regla A o Regla B)."""
-    rep_ok = df["categoria_reputacion"].isin(REPUTACION_OK)
+    rep_ok = df["categoria_reputacion"].isin(REPUTACION_SP)
     sku_ok = df["sku_creados"] >= SKU_MIN
 
     # Regla A - Dormant
     regla_a = (
         df["segmento"].isin(["Medio - Alto", "Medio"])
         & (df["estado_seller"] == "Dormant")
-        & (df["meses_vendidos"] >= MESES_MIN_DORMANT)
+        & (df["dias_vendidos"] >= DIAS_MIN_DORMANT)
         & sku_ok
         & rep_ok
     )
@@ -72,7 +73,7 @@ def filtrar_sp(df: pd.DataFrame) -> pd.DataFrame:
     regla_b = (
         df["segmento"].isin(["Alto", "Medio - Alto"])
         & (df["estado_seller"] == "Activo")
-        & (df["meses_vendidos"] >= MESES_MIN_ACTIVO)
+        & (df["dias_vendidos"] >= DIAS_MIN_ACTIVO)
         & (df["percentil_cvr"] >= PERCENTIL_CVR_MIN)
         & sku_ok
         & rep_ok
