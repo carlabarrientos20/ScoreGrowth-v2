@@ -6,6 +6,7 @@ Capas:
   2. Banderas de brecha por variable (umbral en percentil)
   3. Perfil de banderas (texto) + conteo, para agrupar despues
   4. Palanca comercial (traduce flags -> como accionar comercialmente)
+     + variable debil prioritaria y motivo con el dato que la explica
 
 """
 
@@ -13,6 +14,8 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+from config import HORIZONTE_DIARIO, TRAMOS_TOTALES
 
 
 # ======================================================================
@@ -131,6 +134,68 @@ def _palanca(fila) -> str:
     return " + ".join(PALANCA_FLAG[flag_top])
 
 
+# Nombre de la variable debil, como se le explica al account manager.
+NOMBRE_VARIABLE = {
+    "flag_stock_bajo":    "SKU con stock",
+    "flag_catalogo_bajo": "Volumen SKU",
+    "flag_intermitente":  "Frecuencia de venta",
+    "flag_venta_baja":    "Venta",
+    "flag_cvr_bajo":      "CVR",
+    "flag_sin_inversion": "Inversion SP",
+}
+
+
+def _variable_debil(fila) -> str:
+    """Variable debil prioritaria (la que hay que atacar primero)."""
+    flag_top = _flag_top(fila)
+    if flag_top is None:
+        return "Sin variables debiles"
+    return NOMBRE_VARIABLE[flag_top]
+
+
+def _pesos(x) -> str:
+    return "s/d" if pd.isna(x) else "$" + f"{x:,.0f}".replace(",", ".")
+
+
+def _pct(x) -> str:
+    return "s/d" if pd.isna(x) else f"P{x:.0f}"
+
+
+def _num(x) -> str:
+    return "s/d" if pd.isna(x) else f"{x:.0f}"
+
+
+def _texto(x) -> str:
+    return "s/d" if pd.isna(x) else str(x)
+
+
+def _motivo(fila) -> str:
+    """Explica con el dato del seller por que se ataca la variable prioritaria.
+    Ej: 'Solo 35% de sus SKUs tiene stock (P22 en duros; umbral P60)'.
+    """
+    flag_top = _flag_top(fila)
+    if flag_top is None:
+        return "Sin variables debiles"
+    dureza = fila.get("division_db", "")
+
+    if flag_top == "flag_stock_bajo":
+        return (f"Solo {_texto(fila['pct_con_stock'])} de sus SKUs tiene stock "
+                f"({_pct(fila['percentil_stock'])} en {dureza}; umbral P{UMBRAL_PERCENTIL_SKU})")
+    if flag_top == "flag_catalogo_bajo":
+        return (f"Tiene {_num(fila['sku_stock'])} SKUs con stock "
+                f"({_pct(fila['percentil_volumen_stock'])} en {dureza}; umbral P{UMBRAL_PERCENTIL_SKU})")
+    if flag_top == "flag_intermitente":
+        return (f"Vendio en {_num(fila['tramos_con_venta'])} de {TRAMOS_TOTALES} tramos del horizonte "
+                f"({_num(fila['dias_vendidos'])} dias con venta en {HORIZONTE_DIARIO} dias)")
+    if flag_top == "flag_venta_baja":
+        return (f"Vendio {_pesos(fila['venta'])} en {HORIZONTE_DIARIO} dias "
+                f"({_pct(fila['venta_percentil'])} en {dureza}; umbral P{UMBRAL_PERCENTIL})")
+    if flag_top == "flag_cvr_bajo":
+        return (f"Convierte {_texto(fila['cvr_seller'])} de sus visitas "
+                f"({_pct(fila['percentil_cvr'])} en {dureza}; umbral P{UMBRAL_PERCENTIL})")
+    return f"No invirtio en Sponsored Products en los ultimos {HORIZONTE_DIARIO} dias"
+
+
 # ======================================================================
 # PERFILADO
 # ======================================================================
@@ -166,6 +231,8 @@ def perfilar(df: pd.DataFrame) -> pd.DataFrame:
     # --- capa 4: accionable (motivo) + palanca (canal) del flag prioritario ---
     df["accionable"] = df.apply(_accionable, axis=1)
     df["palanca"] = df.apply(_palanca, axis=1)
+    df["variable_debil"] = df.apply(_variable_debil, axis=1)
+    df["motivo"] = df.apply(_motivo, axis=1)
 
     return df
 
@@ -173,9 +240,9 @@ def perfilar(df: pd.DataFrame) -> pd.DataFrame:
 # ======================================================================
 # ESCRIBIR HOJA "Resumen"
 # ======================================================================
-COLS_RESUMEN = ["seller_id", "name", "estado_seller", "division_db",
+COLS_RESUMEN = ["seller_id", "name", "categoria", "estado_seller", "division_db",
                 "score", "segmento",
-                "flags", "accionable", "palanca", "n_banderas",
+                "flags", "variable_debil", "motivo", "accionable", "palanca", "n_banderas",
                 "flag_venta_baja", "flag_stock_bajo", "flag_catalogo_bajo",
                 "flag_cvr_bajo", "flag_intermitente", "flag_sin_inversion"]
 
@@ -249,6 +316,8 @@ def escribir_hoja_resumen(df: pd.DataFrame, path: str = "score_growth.xlsx"):
             ancho = 38
         if col == "palanca":
             ancho = 32
+        if col == "motivo":
+            ancho = 60
         ws.column_dimensions[letra].width = ancho
 
     ws.auto_filter.ref = f"A1:{get_column_letter(len(cols))}{n_filas}"

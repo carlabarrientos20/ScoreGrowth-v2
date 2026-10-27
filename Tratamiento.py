@@ -49,7 +49,7 @@ TRAMOS_MIN_DORMANT = 2   # vendio en al menos 2 de los 3 tramos del horizonte
 TRAMOS_MIN_ACTIVO = 3    # vendio en los 3 tramos del horizonte
 PERCENTIL_CVR_MIN = 60
 
-COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "admin_email", "categoria_reputacion",
+COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "admin_email", "categoria", "categoria_reputacion",
                     "division_db", "score", "segmento",
                     "venta", "venta_percentil",
                     "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",

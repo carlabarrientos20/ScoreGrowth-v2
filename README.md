@@ -6,8 +6,11 @@ Proyecto de Práctica v2.
 
 1. segmenta a los sellers (Alto, Medio - Alto, Medio, Bajo),
 2. detecta sus **variables débiles** (banderas),
-3. sugiere una **acción comercial** (accionable + palanca), y
-4. arma las listas de **tratamiento** (Regalo SP y Personalizado BD).
+3. sugiere una **acción comercial** (accionable + palanca) y explica el motivo con el dato del seller,
+4. arma las listas de **tratamiento** (Regalo SP y Personalizado BD), y
+5. prioriza a los sellers **potenciables para el equipo de Farming**, por categoría.
+
+Aplicaciones del score: (1) priorización del equipo de Farming, (2) envío de mails automáticos según la palanca y (3) pronóstico de fuga. Hoy está implementada la (1).
 
 Un mismo seller puede tener **dos scores**: uno en su negocio **duro** y otro en su negocio **blando**, según las divisiones en las que venda. La unidad de análisis es `seller_id` + `division_db`, y cada seller se compara solo contra los sellers de su misma dureza.
 
@@ -39,8 +42,9 @@ Un mismo seller puede tener **dos scores**: uno en su negocio **duro** y otro en
 **Salidas**
 - `score_growth.xlsx`
   - *Score Growth*: tabla completa con todas las variables, score y segmento.
-  - *Resumen*: segmento, banderas, accionable y palanca de cada seller-dureza.
+  - *Resumen*: segmento, banderas, variable débil, motivo, accionable y palanca de cada seller-dureza.
   - *Regalo SP* y *Personalizado BD*: listas de tratamiento.
+  - *Priorización de farming*: sellers potenciables, uno por fila, ordenados por prioridad dentro de su categoría.
 - `score_largo.csv`: tabla completa, incluidas las banderas.
 
 **Probar una variable por separado:** `python -m Variables.Recurrencia_venta` (o `Variables.CVR`, `Variables.Carga_SKU`, etc.). Cada módulo imprime un resumen de lo que trae.
@@ -53,16 +57,18 @@ Un mismo seller puede tener **dos scores**: uno en su negocio **duro** y otro en
 
 ```
 Variables/*.py  ──►  main.py (une todo)  ──►  Scoring.py  ──►  Perfil.py  ──►  Excel
- una query por         merge por               score          segmento,        + Tratamiento.py
- variable              seller + dureza         ponderado      banderas,          (Regalo SP,
-                                                              acción             Personalizado BD)
+ una query por         merge por               score          segmento,        + Tratamiento.py (Regalo SP,
+ variable              seller + dureza         ponderado      banderas,          Personalizado BD)
+                                                              acción, motivo   + Farming.py (Priorización
+                                                                                 de farming)
 ```
 
 1. Cada módulo de `Variables/` corre una query y devuelve una tabla por `seller_id` (+ `division_db` cuando aplica).
-2. `main.py` une venta, CVR y recurrencia (outer join) y después agrega catálogo, inversión, estado y reputación (left join).
+2. `main.py` une venta, CVR y recurrencia (outer join) y después agrega catálogo, inversión, estado, reputación y categoría (left join).
 3. `Scoring.py` calcula el score ponderado.
-4. `Perfil.py` asigna segmento, banderas, accionable y palanca, y escribe la hoja *Resumen*.
+4. `Perfil.py` asigna segmento, banderas, variable débil, motivo, accionable y palanca, y escribe la hoja *Resumen*.
 5. `Tratamiento.py` filtra y escribe las hojas *Regalo SP* y *Personalizado BD*.
+6. `Farming.py` filtra a los sellers potenciables y escribe la hoja *Priorización de farming*.
 
 ---
 
@@ -190,6 +196,16 @@ No entra al score. Clasifica a cada seller según el **último mes calendario ce
 - **Se usa en:** solo en los tratamientos.
 - **Limitaciones:** la query no filtra por fecha y asume una fila por seller (el 27-10-2026 no hubo duplicados). Si la tabla empieza a guardar historia, el merge duplicaría filas.
 
+### Contexto: Categoría principal (`Variables/Categoria.py`)
+
+- **Fuente:** columna `division` de `cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas`.
+- **Cálculo:** de todas las divisiones en que el seller tiene SKUs, se queda con la que tiene **más SKUs**. Si hay empate, gana la que tiene más SKUs con stock aprobados y, si sigue el empate, la primera en orden alfabético. `pct_skus_categoria` indica qué parte de su catálogo está en esa categoría.
+- **Se usa en:** la hoja *Priorización de farming*, para asignar cada seller al account manager de esa categoría. También aparece en las hojas *Score Growth*, *Resumen*, *Regalo SP* y *Personalizado BD*.
+- **Limitaciones:**
+  - Cuenta todos los SKUs creados, incluidos los rechazados o pendientes. Un seller con muchos SKUs rechazados en una división puede quedar asignado a ella aunque venda en otra.
+  - Es una foto del catálogo del día en que se corre.
+  - Un seller muy diversificado (`pct_skus_categoria` bajo) queda asignado a una sola categoría aunque venda en varias.
+
 ### No se usa: Rentabilidad (`Variables/Rentabilidad.py`)
 
 Lee un Google Sheet con venta facturada y margen por seller. **No está conectada al pipeline.** Si se quiere usar, hay que adaptarla: el horizonte sigue fijo en 3 meses calendario y el onboarding está escrito como 90 días en vez de usar `config.py`.
@@ -224,7 +240,11 @@ Cada variable débil activa una bandera. Si un seller tiene varias, la acción s
 | 5 | `flag_cvr_bajo` | Mejorar conversión | SP + Comunicación masiva + Dscto comercial |
 | 6 | `flag_sin_inversion` | Activar inversión en SP | SP + Comunicación masiva |
 
-La hoja *Resumen* muestra todas las banderas activas (`flags`), cuántas son (`n_banderas`) y la acción de la prioritaria.
+La hoja *Resumen* muestra todas las banderas activas (`flags`), cuántas son (`n_banderas`) y, para la prioritaria:
+
+- `variable_debil`: la variable a atacar (SKU con stock, Volumen SKU, Frecuencia de venta, Venta, CVR o Inversión SP).
+- `motivo`: el dato del seller que la explica, comparado con el umbral. Por ejemplo: *"Solo 42% de sus SKUs tiene stock (P35 en blandos; umbral P60)"* o *"Vendió en 1 de 3 tramos del horizonte (12 días con venta en 90 días)"*.
+- `accionable` y `palanca`: qué pedirle al seller y por qué canal.
 
 ---
 
@@ -244,6 +264,48 @@ La hoja *Resumen* muestra todas las banderas activas (`flags`), cuántas son (`n
 **Personalizado BD:** segmento Alto, estado Activo y reputación Bueno, Destacado o Plan Growth.
 
 Los parámetros están al inicio de `Tratamiento.py`.
+
+---
+
+## Priorización de farming (`Farming.py`)
+
+Farming es el equipo de Seller Experience que potencia a los sellers que ya venden en Paris. Hay un account manager (AM) por categoría (división), y cada semana toma un pool de sellers para contactar. Esta hoja le entrega a cada AM su lista ordenada, con la variable débil a atacar y el motivo.
+
+**1. Una fila por seller.** Un seller mixto tiene score en duros y en blandos. Se usa el de la dureza de su categoría principal. Si no tiene score en esa dureza, se usa su fila con mayor venta.
+
+**2. Umbrales para ser potenciable** (deben cumplirse todos):
+
+| Criterio | Umbral | Por qué |
+|---|---|---|
+| Estado | Activo, Reactivado o Dormant | Farming trabaja con sellers que ya venden o que se apagaron hace poco. Primera venta queda fuera porque no tiene historia suficiente |
+| Segmento | Medio - Alto o Medio | Tienen base y espacio para crecer. Alto ya tiene trato personalizado (Personalizado BD) y Bajo es más eficiente trabajarlo con mails automáticos |
+| Reputación | Medio, Bueno, Destacado o Plan Growth | No se potencia a sellers que dan mala experiencia al cliente (Bajo) |
+| SKUs creados | ≥ 5 | Catálogo mínimo para tener algo que trabajar |
+| Variables débiles | Al menos 1 | Tiene que haber algo concreto que potenciar |
+
+**3. Prioridad.** Dentro de cada categoría, los sellers se ordenan por score de mayor a menor (desempate: venta). `prioridad = 1` es el primero que debería contactar el AM. Así los Medio - Alto, más cerca de pasar a Alto, quedan arriba.
+
+**Columnas de la hoja**
+
+| Columna | Qué le dice al AM |
+|---|---|
+| `categoria`, `prioridad` | A qué AM le toca y en qué orden contactarlo |
+| `pct_skus_categoria` | Qué parte del catálogo del seller está en esa categoría |
+| `score`, `segmento`, `pts_para_subir_segmento` | Dónde está el seller y cuántos puntos le faltan para subir al segmento siguiente |
+| `variable_debil`, `motivo` | Qué atacar primero y con qué dato explicárselo al seller |
+| `accionable`, `palanca` | Qué pedirle y por qué canal |
+| `flags`, `n_banderas` | Todas sus variables débiles, no solo la prioritaria |
+| `regalo_sp` | Si además califica para Regalo SP (y por qué regla) |
+| Resto | Los KPIs de cada variable, para conversar con el seller |
+
+**Parámetros** (al inicio de `Farming.py`): `ESTADOS_FARMING`, `SEGMENTOS_FARMING`, `REPUTACION_FARMING`, `SKU_MIN_FARMING` y `POOL_SEMANAL`. Con `POOL_SEMANAL = 20`, por ejemplo, la hoja deja solo los 20 primeros de cada categoría. Con `None` muestra a todos los potenciables.
+
+Con los datos del 27-10-2026 quedaban **1.277 sellers potenciables** (≈ 800 Medio - Alto y ≈ 480 Medio). Para más de la mitad, la variable a atacar es **SKU con stock**.
+
+**Limitaciones**
+- La prioridad ordena por score, no por impacto esperado en venta. Un seller con score alto pero poca venta puede quedar antes que uno con mucha venta y score algo menor.
+- No guarda historial de contacto. Si el pool se corre cada semana, el AM tiene que saber a quién ya contactó, porque un seller puede seguir apareciendo arriba.
+- Los sellers en Alto y en Bajo no aparecen, aunque tengan variables débiles. Se asume que los cubren Personalizado BD y los mails automáticos.
 
 ---
 
@@ -288,6 +350,7 @@ main.py              Orquesta: une variables, calcula score, perfila y exporta
 Scoring.py           Pesos y cálculo del score
 Perfil.py            Segmentos, banderas, accionable y palanca + hoja Resumen
 Tratamiento.py       Hojas Regalo SP y Personalizado BD
+Farming.py           Hoja Priorización de farming
 export_excel.py      Hoja Score Growth con formato
 Variables/           Una query por variable
 Analisis.py          Exploración de la distribución del score (gráficos)

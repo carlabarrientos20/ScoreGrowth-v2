@@ -13,7 +13,9 @@ import Variables.Estado as Estado
 import Variables.Carga_SKU as Carga_SKU
 import Variables.Recurrencia_venta as Recurrencia
 import Variables.Reputacion as Reputacion
+import Variables.Categoria as Categoria
 from Tratamiento import escribir_hojas_tratamiento
+from Farming import escribir_hoja_farming
 
 
 from export_excel import exportar
@@ -64,10 +66,15 @@ def tabla_larga() -> pd.DataFrame:
     rep = rep.drop(columns=["name"], errors="ignore")   # evita colision con name de venta
     df = df.merge(rep, on="seller_id", how="left")
 
+    print("=== CATEGORÍA PRINCIPAL DEL SELLER ===")
+    cat = Categoria.calcular()
+    df = df.merge(cat[["seller_id", "categoria", "pct_skus_categoria"]], on="seller_id", how="left")
+
     print("=== TABLA LARGA CALCULADA ===")
     df = df.sort_values(["seller_id", "division_db"]).reset_index(drop=True)
 
-    orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
+    orden = ["seller_id", "name", "admin_email", "categoria", "pct_skus_categoria",
+             "estado_seller", "categoria_reputacion",
              "division_db", "score",
          "venta", "venta_percentil",
          "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
@@ -95,7 +102,7 @@ if __name__ == "__main__":
 
     resumen_consola(largo)
 
-    orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
+    orden = ["seller_id", "name", "admin_email", "categoria", "estado_seller", "categoria_reputacion",
               "division_db", "score", "segmento",
          "venta", "venta_percentil",
          "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
@@ -113,5 +120,8 @@ if __name__ == "__main__":
     escribir_hoja_resumen(largo, "score_growth.xlsx")
     print("=== AGREGANDO HOJAS DE TRATAMIENTO ===")
     escribir_hojas_tratamiento(largo, "score_growth.xlsx")
+    print("=== AGREGANDO HOJA DE PRIORIZACIÓN DE FARMING ===")
+    escribir_hoja_farming(largo, "score_growth.xlsx")
 
-    print("\nListo: score_largo.csv y score_growth.xlsx (hojas: Score Growth + Resumen)")
+    print("\nListo: score_largo.csv y score_growth.xlsx "
+          "(hojas: Score Growth, Resumen, Regalo SP, Personalizado BD, Priorización de farming)")
