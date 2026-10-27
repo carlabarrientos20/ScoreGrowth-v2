@@ -13,6 +13,9 @@ env/
 data/*.csv
 data/*.xlsx
 
+# Archivos temporales de Excel (se crean mientras el archivo esta abierto)
+~$*
+
 # Editores / SO
 .vscode/
 .idea/

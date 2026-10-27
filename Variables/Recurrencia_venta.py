@@ -1,9 +1,15 @@
 """
 Variable: Recurrencia de venta.
 
-Mide en cuantos meses  el seller efectivamente vendio.
+Mide en cuantos dias del horizonte el seller efectivamente vendio.
 
-  recurrencia = meses_con_venta / meses_totales_ventana   (valor 0.0 a 1.0)
+  recurrencia           = dias_vendidos / dias_ventana   (0.0 a 1.0, informativo)
+  percentil_recurrencia = percentil de dias_vendidos dentro de su dureza (0 a 100).
+                          Es lo que entra al score, igual que las demas variables.
+
+Ademas entrega tramos_con_venta: en cuantos tramos de 30 dias del horizonte
+vendio al menos una vez (con 90 dias: 0 a 3). Lo usan la bandera de frecuencia
+(Perfil.py) y las reglas de Regalo SP (Tratamiento.py).
 """
 
 import pandas as pd
@@ -12,7 +18,8 @@ from config import (
     HORIZONTE_DIARIO,
     DUROS,
     BLANDOS,
-    DIAS_ONBOARDING
+    DIAS_ONBOARDING,
+    TAMANO_TRAMO
 )
 
 _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
@@ -36,7 +43,9 @@ meses_con_venta AS (
             WHEN t.division IN ({_blandos_sql}) THEN 'blandos'
             ELSE 'otros'
         END AS division_db,
-        COUNT(DISTINCT DATE_TRUNC('day', t.fecha_venta)) AS dias_vendidos
+        COUNT(DISTINCT DATE_TRUNC('day', t.fecha_venta)) AS dias_vendidos,
+        -- tramo 0 = ayer hasta hace 30 dias, tramo 1 = 31-60 dias, tramo 2 = 61-90 dias (division entera)
+        COUNT(DISTINCT (DATEDIFF(day, t.fecha_venta, CURRENT_DATE) - 1) / {TAMANO_TRAMO}) AS tramos_con_venta
     FROM cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
     INNER JOIN sellers_validos s
         ON t.seller_id = s.seller_id
@@ -50,17 +59,20 @@ SELECT
     division_db,
     dias_vendidos,
     {HORIZONTE_DIARIO} AS dias_ventana,
-    ROUND(dias_vendidos::numeric / {HORIZONTE_DIARIO}, 3) AS recurrencia
+    tramos_con_venta,
+    ROUND(dias_vendidos::numeric / {HORIZONTE_DIARIO}, 3) AS recurrencia,
+    ROUND(PERCENT_RANK() OVER (PARTITION BY division_db ORDER BY dias_vendidos) * 100, 0) AS percentil_recurrencia
 FROM meses_con_venta
 ORDER BY division_db, recurrencia DESC
 """
 
 
 def calcular() -> pd.DataFrame:
-    """Devuelve: seller_id, name, division_db, meses_vendidos, meses_ventana, recurrencia.
+    """Devuelve: seller_id, name, division_db, dias_vendidos, dias_ventana,
+    tramos_con_venta, recurrencia, percentil_recurrencia.
 
-    recurrencia va de 0.0 (nunca vendio) a 1.0 (vendio todos los meses).
-    Para el score: aporte = recurrencia * PESO 
+    recurrencia va de 0.0 (nunca vendio) a 1.0 (vendio todos los dias).
+    Para el score: aporte = percentil_recurrencia * PESO_RECURRENCIA
     """
     return run_query(QUERY_RECURRENCIA)
 
@@ -72,4 +84,8 @@ if __name__ == "__main__":
     print(f"Sellers unicos: {df['seller_id'].nunique()}")
     print("\nDistribucion de recurrencia:")
     print(df["recurrencia"].describe())
+    print("\nPercentil de recurrencia (mediana por dureza):")
+    print(df.groupby("division_db")["percentil_recurrencia"].median())
+    print("\nSellers por tramos con venta:")
+    print(df["tramos_con_venta"].value_counts().sort_index())
     print("\n", df.head(50))

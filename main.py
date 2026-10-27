@@ -33,7 +33,8 @@ def tabla_larga() -> pd.DataFrame:
 
     venta_cols = venta[["seller_id", "name", "admin_email", "division_db", "venta", "venta_percentil"]]
     cvr_cols = cvr[["seller_id", "division_db", "cvr_seller", "percentil_cvr"]]
-    rec_cols = rec[["seller_id", "division_db", "dias_vendidos", "recurrencia"]]
+    rec_cols = rec[["seller_id", "division_db", "dias_vendidos", "tramos_con_venta",
+                    "recurrencia", "percentil_recurrencia"]]
 
     print("=== MERGE VENTA + CVR + RECURRENCIA ===")
     df = venta_cols.merge(cvr_cols, on=["seller_id", "division_db"], how="outer")
@@ -69,7 +70,7 @@ def tabla_larga() -> pd.DataFrame:
     orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
              "division_db", "score",
          "venta", "venta_percentil",
-         "dias_vendidos", "recurrencia",
+         "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
          "cvr_seller", "percentil_cvr",
          "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
          "invirtio", "total_invertido"]
@@ -97,7 +98,7 @@ if __name__ == "__main__":
     orden = ["seller_id", "name", "admin_email", "estado_seller", "categoria_reputacion",
               "division_db", "score", "segmento",
          "venta", "venta_percentil",
-         "dias_vendidos", "recurrencia",
+         "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
          "cvr_seller", "percentil_cvr",
          "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
          "invirtio", "total_invertido"]

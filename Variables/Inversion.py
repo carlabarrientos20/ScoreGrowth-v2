@@ -11,13 +11,13 @@ Tabla final: seller_id | name | invirtio (si/no) | total_invertido
 
 import pandas as pd
 from db import run_query, run_query_pg
-from config import HORIZONTE_DIARIO
+from config import HORIZONTE_DIARIO, DIAS_ONBOARDING
 
-QUERY_SELLERS_VALIDOS = """
+QUERY_SELLERS_VALIDOS = f"""
 SELECT s.id AS seller_id, s.name
 FROM eiffel_seller.seller s
 LEFT JOIN cencosud_chile_txd_reporter.cluster_seller c ON s.id = c.id_seller
-WHERE s.created_at <= DATEADD(day, -90, CURRENT_DATE)
+WHERE s.created_at <= DATEADD(day, -{DIAS_ONBOARDING}, CURRENT_DATE)
   AND c.tier = 'Mid-Market' AND publish = 1
 """
 

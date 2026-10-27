@@ -1,7 +1,7 @@
 """
 Variable 1: Venta.
 
-Calcula la venta total de cada seller en los ultimos 3 meses cerrados,
+Calcula la venta total de cada seller en los ultimos HORIZONTE_DIARIO dias (sin contar hoy),
 clasificada por division (duros/blandos), y su percentil DENTRO de su dureza.
 """
 

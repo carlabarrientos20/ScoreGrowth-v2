@@ -1,7 +1,8 @@
 """
 Variable 2: Conversion (CVR)
 
-Calcula la tasa de conversion de cada seller en los ultimos 3 meses cerrados,
+Calcula la tasa de conversion de cada seller en los ultimos HORIZONTE_DIARIO dias
+(sin contar hoy),
 clasificada por division (duros/blandos), y su percentil DENTRO de su division.
 
 CVR_seller = SUM(transacciones del seller) / SUM(visitas del seller)
@@ -40,8 +41,8 @@ total_transacciones AS (
     FROM cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
     INNER JOIN sellers_validos s
         ON t.seller_id = s.seller_id
-    WHERE t.fecha_venta >= DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE)
-      AND t.fecha_venta <=  DATE_TRUNC('day', CURRENT_DATE)
+    WHERE t.fecha_venta >= DATE_TRUNC('day', DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE))
+      AND t.fecha_venta <  DATE_TRUNC('day', CURRENT_DATE)
     GROUP BY t.seller_id, division_db, s.name
 ),
 numero_visitas AS (
@@ -55,7 +56,7 @@ numero_visitas AS (
     LEFT JOIN cencosud_chile_txd_reporter.rpt_catalogo_cencopim_product_replicas c
         ON c.sku_marketplace = d.product_id
     WHERE d.date >= DATE_TRUNC('day', DATEADD(day, -{HORIZONTE_DIARIO}, CURRENT_DATE))
-      AND d.date <= DATE_TRUNC('day', CURRENT_DATE)
+      AND d.date <  DATE_TRUNC('day', CURRENT_DATE)
     GROUP BY c.seller_id, c.seller_name, division_db
 ),
 con_cvr AS (

@@ -2,7 +2,7 @@
 Perfil.py - Perfilado de sellers para Score Growth.
 
 Capas:
-  1. Segmento por score (cortes fijos, Alto >= 70)
+  1. Segmento por score (cortes fijos, Alto >= 68)
   2. Banderas de brecha por variable (umbral en percentil)
   3. Perfil de banderas (texto) + conteo, para agrupar despues
   4. Palanca comercial (traduce flags -> como accionar comercialmente)
@@ -14,13 +14,20 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from config import TRAMOS_TOTALES
+
 
 # ======================================================================
 # CAPA 1 - SEGMENTACION POR SCORE  (cortes fijos, continuos, sin huecos)
 # ======================================================================
-CORTE_ALTO = 70     # >= 70
-CORTE_MEDIO_ALTO = 53      # 53 a 70
-CORTE_MEDIO = 37  # 37 a 53   (< 37 = Bajo)
+# Recalibrados el 27-10-2026 al pasar la frecuencia a percentil de dias.
+# Los cortes anteriores (70 / 53 / 37) dejaban ~11% Alto, ~40% Medio-Alto,
+# ~28% Medio y ~21% Bajo con la version mensual. Se buscaron los cortes que
+# mantienen esas mismas proporciones con el score nuevo (data del 27-10-2026).
+# Si cambian los pesos o las variables, hay que recalibrar.
+CORTE_ALTO = 68           # >= 68
+CORTE_MEDIO_ALTO = 46     # 46 a 68
+CORTE_MEDIO = 32          # 32 a 46   (< 32 = Bajo)
 
 
 def clasificar_segmento(score: float) -> str:
@@ -38,9 +45,18 @@ def clasificar_segmento(score: float) -> str:
 # ======================================================================
 # CAPA 2 - BANDERAS DE BRECHA
 # ======================================================================
+# Variable debil si:
+#   Venta              venta_percentil          < 40  (P40)
+#   SKU con stock      percentil_stock          < 60  (P60)
+#   Volumen SKU        percentil_volumen_stock  < 60  (P60)
+#   Frecuencia venta   tramos_con_venta         < 2   (con 90 dias: vendio en menos de 2 de los 3 tramos)
+#   CVR                percentil_cvr            < 40  (P40)
+#   Inversion          invirtio == "no"
 UMBRAL_PERCENTIL = 40
 UMBRAL_PERCENTIL_SKU = 60
-UMBRAL_RECURRENCIA = 1.0
+# Minimo de tramos con venta para NO ser intermitente: 2/3 de los tramos, redondeado
+# hacia arriba. 3 tramos (90 dias) -> 2 | 2 tramos (60 dias) -> 2 | 4 tramos (120 dias) -> 3
+UMBRAL_TRAMOS = -(-TRAMOS_TOTALES * 2 // 3)
 
 
 FLAGS = ["flag_venta_baja", "flag_stock_bajo", "flag_catalogo_bajo",
@@ -127,17 +143,18 @@ def perfilar(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     for col in ["score", "venta_percentil", "percentil_stock",
-                "percentil_volumen_stock", "percentil_cvr", "recurrencia"]:
+                "percentil_volumen_stock", "percentil_cvr", "recurrencia",
+                "percentil_recurrencia", "tramos_con_venta"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["segmento"] = df["score"].apply(clasificar_segmento)
 
-    df["flag_venta_baja"]    = df["venta_percentil"] < UMBRAL_PERCENTIL_SKU
+    df["flag_venta_baja"]    = df["venta_percentil"] < UMBRAL_PERCENTIL
     df["flag_stock_bajo"]    = df["percentil_stock"] < UMBRAL_PERCENTIL_SKU
     df["flag_catalogo_bajo"] = df["percentil_volumen_stock"] < UMBRAL_PERCENTIL_SKU
     df["flag_cvr_bajo"]      = df["percentil_cvr"] < UMBRAL_PERCENTIL
-    df["flag_intermitente"]  = df["dias_vendidos"] < UMBRAL_RECURRENCIA
+    df["flag_intermitente"]  = df["tramos_con_venta"] < UMBRAL_TRAMOS
     df["flag_sin_inversion"] = df["invirtio"].astype(str).str.lower() == "no"
     for f in FLAGS:
         df[f] = df[f].fillna(False)

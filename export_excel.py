@@ -9,10 +9,11 @@ from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.utils import get_column_letter
 
 
-COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock", "percentil_volumen_stock", "score"]
+COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock", "percentil_volumen_stock",
+                  "percentil_recurrencia", "score"]
 COLS_PLATA = ["venta", "total_invertido"]
 COLS_PCT = ["margen_pct"]
-COLS_SEMAFORO = ["meses_vendidos"]
+COLS_SEMAFORO = ["dias_vendidos", "tramos_con_venta"]
 
 
 def exportar(df: pd.DataFrame, path: str = "score_growth.xlsx"):

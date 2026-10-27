@@ -8,22 +8,25 @@ Genera dos listas filtradas a partir de la tabla larga (con score + perfilado):
 
 Criterios
 ---------
+Con horizonte diario, los "meses" se reemplazan por tramos de 30 dias
+(tramos_con_venta, ver Recurrencia_venta.py). Con 90 dias hay 3 tramos.
+
 Regalo SP  (basta cumplir Regla A O Regla B):
 
   Regla A - Dormant:
     segmento in {Medio - Alto, Medio}
     estado_seller == Dormant
-    meses_vendidos >= 2
+    tramos_con_venta >= 2        (vendio en 2 de 3 tramos; antes "2 de 3 meses")
     sku_creados >= 5
-    categoria_reputacion in {Bueno, Destacado, Plan Growth}
+    categoria_reputacion in {Medio, Bueno, Destacado, Plan Growth}
 
   Regla B - Activo:
     segmento in {Alto, Medio - Alto}
     estado_seller == Activo
-    meses_vendidos >= 3
+    tramos_con_venta >= 3        (vendio en los 3 tramos; antes "los 3 meses")
     percentil_cvr >= 60
     sku_creados >= 5
-    categoria_reputacion in {Bueno, Destacado, Plan Growth}
+    categoria_reputacion in {Medio, Bueno, Destacado, Plan Growth}
 
 Personalizado BD:
     segmento == Alto
@@ -36,19 +39,21 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from config import TRAMOS_TOTALES
+
 
 # ---- parametros de los criterios (editar aca si cambian) ----
 REPUTACION_OK = ["Bueno", "Destacado", "Plan Growth"]
 REPUTACION_SP = ["Medio","Bueno", "Destacado", "Plan Growth"]
 SKU_MIN = 5
-DIAS_MIN_DORMANT = 60  # Aproximadamente 2 meses
-DIAS_MIN_ACTIVO = 90  # Aproximadamente 3 meses
+TRAMOS_MIN_DORMANT = TRAMOS_TOTALES - 1  # con 90 dias: 2 de 3 tramos de 30 dias con venta
+TRAMOS_MIN_ACTIVO = TRAMOS_TOTALES       # con 90 dias: vendio en los 3 tramos
 PERCENTIL_CVR_MIN = 60
 
 COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "admin_email", "categoria_reputacion",
                     "division_db", "score", "segmento",
                     "venta", "venta_percentil",
-                    "dias_vendidos", "recurrencia",
+                    "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
                     "cvr_seller", "percentil_cvr",
                     "sku_creados", "sku_stock", "pct_con_stock",
                     "percentil_stock", "percentil_volumen_stock",
@@ -64,7 +69,7 @@ def filtrar_sp(df: pd.DataFrame) -> pd.DataFrame:
     regla_a = (
         df["segmento"].isin(["Medio - Alto", "Medio"])
         & (df["estado_seller"] == "Dormant")
-        & (df["dias_vendidos"] >= DIAS_MIN_DORMANT)
+        & (df["tramos_con_venta"] >= TRAMOS_MIN_DORMANT)
         & sku_ok
         & rep_ok
     )
@@ -73,7 +78,7 @@ def filtrar_sp(df: pd.DataFrame) -> pd.DataFrame:
     regla_b = (
         df["segmento"].isin(["Alto", "Medio - Alto"])
         & (df["estado_seller"] == "Activo")
-        & (df["dias_vendidos"] >= DIAS_MIN_ACTIVO)
+        & (df["tramos_con_venta"] >= TRAMOS_MIN_ACTIVO)
         & (df["percentil_cvr"] >= PERCENTIL_CVR_MIN)
         & sku_ok
         & rep_ok

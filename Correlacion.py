@@ -20,7 +20,7 @@ print(f"\nFilas (sellers): {len(df)}\n")
 columnas = ["venta_percentil",
             "percentil_cvr",
     "percentil_stock", "percentil_volumen_stock",
-    "total_invertido", "recurrencia"
+    "total_invertido", "percentil_recurrencia"
 ]
 
 
