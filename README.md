@@ -8,7 +8,7 @@ Proyecto de Práctica v2.
 2. detecta sus **variables débiles** (banderas),
 3. sugiere una **acción comercial** (accionable + palanca) y explica el motivo con el dato del seller,
 4. arma las listas de **tratamiento** (Regalo SP y Personalizado BD), y
-5. prioriza a los sellers **potenciables para el equipo de Farming**, por categoría.
+5. prioriza a los sellers **con potencial para el equipo de Farming** (perfiles Falta oferta y Falta demanda), por categoría.
 
 Aplicaciones del score: (1) priorización del equipo de Farming, (2) envío de mails automáticos según la palanca y (3) pronóstico de fuga. Hoy está implementada la (1).
 
@@ -44,7 +44,8 @@ Un mismo seller puede tener **dos scores**: uno en su negocio **duro** y otro en
   - *Score Growth*: tabla completa con todas las variables, score y segmento.
   - *Resumen*: segmento, banderas, variable débil, motivo, accionable y palanca de cada seller-dureza.
   - *Regalo SP* y *Personalizado BD*: listas de tratamiento.
-  - *Priorización de farming*: sellers potenciables, uno por fila, ordenados por prioridad dentro de su categoría.
+  - *Priorización de farming*: sellers con potencial (perfiles Falta oferta y Falta demanda), uno por fila, ordenados por venta dentro de su categoría.
+  - *Resumen farming*: cuántos sellers con potencial tiene cada categoría, por perfil.
 - `score_largo.csv`: tabla completa, incluidas las banderas.
 
 **Probar una variable por separado:** `python -m Variables.Recurrencia_venta` (o `Variables.CVR`, `Variables.Carga_SKU`, etc.). Cada módulo imprime un resumen de lo que trae.
@@ -68,7 +69,7 @@ Variables/*.py  ──►  main.py (une todo)  ──►  Scoring.py  ──► 
 3. `Scoring.py` calcula el score ponderado.
 4. `Perfil.py` asigna segmento, banderas, variable débil, motivo, accionable y palanca, y escribe la hoja *Resumen*.
 5. `Tratamiento.py` filtra y escribe las hojas *Regalo SP* y *Personalizado BD*.
-6. `Farming.py` filtra a los sellers potenciables y escribe la hoja *Priorización de farming*.
+6. `Farming.py` asigna el perfil de potencial y escribe las hojas *Priorización de farming* y *Resumen farming*.
 
 ---
 
@@ -269,43 +270,57 @@ Los parámetros están al inicio de `Tratamiento.py`.
 
 ## Priorización de farming (`Farming.py`)
 
-Farming es el equipo de Seller Experience que potencia a los sellers que ya venden en Paris. Hay un account manager (AM) por categoría (división), y cada semana toma un pool de sellers para contactar. Esta hoja le entrega a cada AM su lista ordenada, con la variable débil a atacar y el motivo.
+Farming es el equipo de Seller Experience que potencia a los sellers que ya venden en Paris. Hay un account manager (AM) por categoría (división). Esta hoja le entrega a cada AM su lista de sellers **con potencial**, ordenada por venta, con el perfil de potencial, el motivo (fortaleza + brecha, con los datos del seller) y la palanca sugerida. Además, la hoja *Resumen farming* muestra cuántos sellers tiene cada categoría por perfil.
 
 **1. Una fila por seller.** Un seller mixto tiene score en duros y en blandos. Se usa el de la dureza de su categoría principal. Si no tiene score en esa dureza, se usa su fila con mayor venta.
 
-**2. Umbrales para ser potenciable** (deben cumplirse todos):
+**2. Filtros básicos** (deben cumplirse todos):
 
 | Criterio | Umbral | Por qué |
 |---|---|---|
-| Estado | Activo, Reactivado o Dormant | Farming trabaja con sellers que ya venden o que se apagaron hace poco. Primera venta queda fuera porque no tiene historia suficiente |
-| Segmento | Medio - Alto o Medio | Tienen base y espacio para crecer. Alto ya tiene trato personalizado (Personalizado BD) y Bajo es más eficiente trabajarlo con mails automáticos |
+| Estado | Activo, Reactivado o Dormant | Farming trabaja con sellers que ya venden o que se apagaron hace poco. El estado queda visible como columna. Primera venta queda fuera porque no tiene historia suficiente |
 | Reputación | Medio, Bueno, Destacado o Plan Growth | No se potencia a sellers que dan mala experiencia al cliente (Bajo) |
 | SKUs creados | ≥ 5 | Catálogo mínimo para tener algo que trabajar |
-| Variables débiles | Al menos 1 | Tiene que haber algo concreto que potenciar |
 
-**3. Prioridad.** Dentro de cada categoría, los sellers se ordenan por score de mayor a menor (desempate: venta). `prioridad = 1` es el primero que debería contactar el AM. Así los Medio - Alto, más cerca de pasar a Alto, quedan arriba.
+No se filtra por segmento: entran también los sellers Alto, porque el equipo de BD deja de existir y sus sellers pasan a los AM de farming.
+
+**3. Perfiles de potencial.** Los umbrales de debilidad dicen qué atacar; los de potencial dicen en qué se apoya el seller. Un seller tiene potencial si tiene una **fortaleza** (variable ≥ P60) y una **brecha** relacionada. Los percentiles son dentro de su dureza.
+
+| Perfil | Fortaleza | Brecha | Qué significa | Palanca |
+|---|---|---|---|---|
+| **B. Falta oferta** | Venta ≥ P60 **o** CVR ≥ P60 | SKU con stock < P60 **o** Volumen SKU < P60 | Sus productos se venden o convierten bien, pero tiene poco para vender | Que cargue stock y amplíe catálogo (revisar lo que tiene en otros marketplaces), descuento en comisión |
+| **C. Falta demanda** | SKU con stock ≥ P60 **y** Volumen SKU ≥ P60 | Venta < P40 **o** CVR < P40 | Tiene catálogo y stock, pero vende o convierte poco | Precio competitivo, descuento con tarjeta, SP |
+
+Los umbrales de brecha son los mismos de las banderas (P60 para stock y volumen, P40 para venta y CVR). Un seller no puede estar en los dos perfiles a la vez. Frecuencia e Inversión no se usan en los perfiles.
+
+**4. Prioridad.** Dentro de cada categoría, los sellers se ordenan por **venta de mayor a menor**. `prioridad = 1` es el primero que debería contactar el AM: si al seller que más vende le falta stock, cargarlo tiene más impacto.
 
 **Columnas de la hoja**
 
 | Columna | Qué le dice al AM |
 |---|---|
 | `categoria`, `prioridad` | A qué AM le toca y en qué orden contactarlo |
+| `perfil_farming` | Falta oferta (B) o Falta demanda (C) |
+| `motivo_farming` | Fortaleza y brecha con los datos del seller. Ej: *"Fortaleza: venta P97 ($9.270.516), CVR P91 (2.00%). Brecha: 31.83% de SKUs con stock (P33)."* |
+| `palanca_farming` | Qué ofrecerle según el perfil |
+| `estado_seller` | Activo, Reactivado o Dormant (con un Dormant la conversación parte por "¿por qué dejaste de vender?") |
 | `pct_skus_categoria` | Qué parte del catálogo del seller está en esa categoría |
-| `score`, `segmento`, `pts_para_subir_segmento` | Dónde está el seller y cuántos puntos le faltan para subir al segmento siguiente |
-| `variable_debil`, `motivo` | Qué atacar primero y con qué dato explicárselo al seller |
-| `accionable`, `palanca` | Qué pedirle y por qué canal |
-| `flags`, `n_banderas` | Todas sus variables débiles, no solo la prioritaria |
+| `score`, `segmento`, `pts_para_subir_segmento` | Dónde está el seller y cuántos puntos le faltan para subir de segmento (vacío si ya es Alto) |
+| `flags` | Todas sus variables débiles |
 | `regalo_sp` | Si además califica para Regalo SP (y por qué regla) |
 | Resto | Los KPIs de cada variable, para conversar con el seller |
 
-**Parámetros** (al inicio de `Farming.py`): `ESTADOS_FARMING`, `SEGMENTOS_FARMING`, `REPUTACION_FARMING`, `SKU_MIN_FARMING` y `POOL_SEMANAL`. Con `POOL_SEMANAL = 20`, por ejemplo, la hoja deja solo los 20 primeros de cada categoría. Con `None` muestra a todos los potenciables.
+**Parámetros** (al inicio de `Farming.py`): filtros básicos (`ESTADOS_FARMING`, `REPUTACION_FARMING`, `SKU_MIN_FARMING`), umbral de fortaleza (`UMBRAL_FORTALEZA = 60`), palancas por perfil (`PALANCA_PERFIL`) y `POOL_POR_CATEGORIA`. Con `POOL_POR_CATEGORIA = 30`, por ejemplo, la hoja deja solo los 30 primeros de cada categoría. Con `None` muestra a todos.
 
-Con los datos del 27-10-2026 quedaban **1.277 sellers potenciables** (≈ 800 Medio - Alto y ≈ 480 Medio). Para más de la mitad, la variable a atacar es **SKU con stock**.
+Con los datos del 27-10-2026 había **≈ 1.150 sellers con potencial**: ≈ 860 Falta oferta y ≈ 290 Falta demanda (≈ 140 Alto, ≈ 630 Medio - Alto, ≈ 300 Medio y ≈ 80 Bajo).
+
+**Cadencia sugerida:** correr el score el primero de cada mes y que los AM trabajen el pool por semanas, de arriba hacia abajo. Al mes siguiente se compara a los contactados contra la foto anterior. Conviene comparar valores absolutos (% de SKUs con stock, SKUs, venta en $) y no percentiles, y contra sellers no contactados, porque la estacionalidad (Black Friday, Navidad) mueve a todos.
 
 **Limitaciones**
-- La prioridad ordena por score, no por impacto esperado en venta. Un seller con score alto pero poca venta puede quedar antes que uno con mucha venta y score algo menor.
-- No guarda historial de contacto. Si el pool se corre cada semana, el AM tiene que saber a quién ya contactó, porque un seller puede seguir apareciendo arriba.
-- Los sellers en Alto y en Bajo no aparecen, aunque tengan variables débiles. Se asume que los cubren Personalizado BD y los mails automáticos.
+- No guarda historial de contacto (la bitácora de contactos queda a cargo de otra persona). Mientras no exista, el AM tiene que llevar registro de a quién ya contactó.
+- Cada corrida sobrescribe el Excel. Para comparar mes a mes hay que guardar una copia de cada corrida.
+- La prioridad ordena por venta, así que los sellers chicos con mucho potencial relativo quedan más abajo.
+- Un seller con brecha en Frecuencia o Inversión, pero sin brecha de oferta o demanda, no aparece.
 
 ---
 
@@ -350,7 +365,7 @@ main.py              Orquesta: une variables, calcula score, perfila y exporta
 Scoring.py           Pesos y cálculo del score
 Perfil.py            Segmentos, banderas, accionable y palanca + hoja Resumen
 Tratamiento.py       Hojas Regalo SP y Personalizado BD
-Farming.py           Hoja Priorización de farming
+Farming.py           Hojas Priorización de farming y Resumen farming
 export_excel.py      Hoja Score Growth con formato
 Variables/           Una query por variable
 Analisis.py          Exploración de la distribución del score (gráficos)

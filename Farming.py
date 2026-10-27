@@ -3,8 +3,8 @@ Farming.py - Priorizacion de sellers para el equipo de Farming.
 
 Farming potencia a sellers que ya venden en Paris. Cada account manager (AM)
 ve una categoria (division). Esta hoja le entrega a cada AM su lista de
-sellers potenciables, ordenada por prioridad, con la variable debil a atacar
-y el motivo (el dato del seller que la explica).
+sellers con potencial, ordenada por venta, con el perfil de potencial, el
+motivo (fortaleza + brecha, con los datos del seller) y la palanca sugerida.
 
 Como se arma
 ------------
@@ -12,19 +12,29 @@ Como se arma
    usa el de la dureza de su categoria principal. Si no tiene score en esa
    dureza, se usa su fila con mayor venta.
 
-2. Filtro "potenciable" (deben cumplirse todos):
+2. Filtros basicos (deben cumplirse todos):
      estado_seller         in {Activo, Reactivado, Dormant}   ya vende o se apago hace poco
-     segmento              in {Medio - Alto, Medio}           tiene base y espacio para crecer
-                                                               (Alto -> Personalizado BD,
-                                                                Bajo -> mails automaticos)
-     categoria_reputacion  in {Medio, Bueno, Destacado, Plan Growth}
-                                                               no potenciar a quien da mala experiencia
+     categoria_reputacion  in {Medio, Bueno, Destacado, Plan Growth}   no Bajo
      sku_creados           >= 5                                catalogo minimo para trabajar
-     n_banderas            >= 1                                tiene al menos una variable debil que atacar
+   No se filtra por segmento: entran tambien los sellers Alto.
 
-3. Prioridad dentro de cada categoria: score de mayor a menor (desempate: venta).
+3. Perfil de potencial (percentiles dentro de la dureza). Un seller entra si
+   cumple uno de los dos (no se pueden cumplir ambos a la vez):
+
+   B - Falta oferta:  FORTALEZA en demanda   Venta >= P60  o  CVR >= P60
+                      BRECHA en oferta       SKU con stock < P60  o  Volumen SKU < P60
+       -> sus productos se venden / convierten, pero tiene poco para vender.
+          Palanca: que cargue stock y amplie catalogo (revisar lo que tiene en
+          otros marketplaces), descuento en comision.
+
+   C - Falta demanda: FORTALEZA en oferta    SKU con stock >= P60  y  Volumen SKU >= P60
+                      BRECHA en demanda      Venta < P40  o  CVR < P40
+       -> tiene catalogo y stock, pero vende o convierte poco.
+          Palanca: precio competitivo, descuento con tarjeta, SP.
+
+4. Prioridad dentro de cada categoria: venta de mayor a menor.
    prioridad = 1 es el primer seller que deberia contactar el AM de esa categoria.
-   Si se define POOL_SEMANAL, solo quedan los N primeros de cada categoria.
+   Si se define POOL_POR_CATEGORIA, solo quedan los N primeros de cada categoria.
 """
 
 import math
@@ -35,29 +45,44 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from config import DUROS, BLANDOS
-from Perfil import CORTE_ALTO, CORTE_MEDIO_ALTO, CORTE_MEDIO, COLOR_SEGMENTO
+from Perfil import (CORTE_ALTO, CORTE_MEDIO_ALTO, CORTE_MEDIO, COLOR_SEGMENTO,
+                    UMBRAL_PERCENTIL, UMBRAL_PERCENTIL_SKU,
+                    _pct, _pesos, _num, _texto)
 from Tratamiento import filtrar_sp
 
 
-# ---- parametros de priorizacion (editar aca si cambian) ----
+# ---- filtros basicos (editar aca si cambian) ----
 ESTADOS_FARMING = ["Activo", "Reactivado", "Dormant"]
-SEGMENTOS_FARMING = ["Medio - Alto", "Medio"]
 REPUTACION_FARMING = ["Medio", "Bueno", "Destacado", "Plan Growth"]
 SKU_MIN_FARMING = 5
-POOL_SEMANAL = None   # ej: 20 -> solo los 20 primeros de cada categoria. None = todos los potenciables
+
+# ---- umbrales de los perfiles de potencial ----
+UMBRAL_FORTALEZA = 60                        # variable fuerte si su percentil es >= P60
+UMBRAL_BRECHA_OFERTA = UMBRAL_PERCENTIL_SKU  # stock / volumen debil si < P60 (mismo umbral que las banderas)
+UMBRAL_BRECHA_DEMANDA = UMBRAL_PERCENTIL     # venta / CVR debil si < P40 (mismo umbral que las banderas)
+
+PERFIL_B = "Falta oferta"
+PERFIL_C = "Falta demanda"
+PALANCA_PERFIL = {
+    PERFIL_B: "Cargar stock y ampliar catalogo (revisar otros marketplaces) + dscto en comision",
+    PERFIL_C: "Precio competitivo + dscto con tarjeta + SP",
+}
+
+POOL_POR_CATEGORIA = None   # ej: 30 -> solo los 30 primeros de cada categoria. None = todos
 
 NOMBRE_HOJA = "Priorización de farming"
+NOMBRE_HOJA_RESUMEN = "Resumen farming"
 
 COLS_FARMING = ["categoria", "prioridad", "seller_id", "name", "admin_email",
-                "pct_skus_categoria", "estado_seller", "categoria_reputacion", "division_db",
+                "perfil_farming", "motivo_farming", "palanca_farming",
+                "estado_seller", "categoria_reputacion", "pct_skus_categoria", "division_db",
                 "score", "segmento", "pts_para_subir_segmento",
-                "variable_debil", "motivo", "accionable", "palanca",
-                "flags", "n_banderas", "regalo_sp",
+                "flags", "regalo_sp",
                 "venta", "venta_percentil",
-                "dias_vendidos", "tramos_con_venta", "percentil_recurrencia",
                 "cvr_seller", "percentil_cvr",
                 "sku_creados", "sku_stock", "pct_con_stock",
                 "percentil_stock", "percentil_volumen_stock",
+                "dias_vendidos", "tramos_con_venta", "percentil_recurrencia",
                 "invirtio", "total_invertido"]
 
 
@@ -69,13 +94,13 @@ def _dureza_de(division) -> str:
     return "otros"
 
 
-def _pts_para_subir(fila) -> float:
-    """Puntos de score que le faltan para pasar al segmento siguiente."""
+def _pts_para_subir(fila):
+    """Puntos de score que le faltan para pasar al segmento siguiente (vacio si es Alto)."""
     siguiente = {"Medio - Alto": CORTE_ALTO, "Medio": CORTE_MEDIO_ALTO, "Bajo": CORTE_MEDIO}
     corte = siguiente.get(fila["segmento"])
     if corte is None or pd.isna(fila["score"]):
         return None
-    return math.ceil((corte - fila["score"]) * 10) / 10   # hacia arriba: 67.95 -> le falta 0.1, no 0.0
+    return math.ceil((corte - fila["score"]) * 10) / 10   # hacia arriba: 67.95 -> le falta 0.1
 
 
 def una_fila_por_seller(df: pd.DataFrame) -> pd.DataFrame:
@@ -88,62 +113,109 @@ def una_fila_por_seller(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates("seller_id").drop(columns="_orden")
 
 
+def asignar_perfil(df: pd.DataFrame) -> pd.Series:
+    """Perfil de potencial de cada fila: 'Falta oferta', 'Falta demanda' o vacio."""
+    venta_fuerte = df["venta_percentil"] >= UMBRAL_FORTALEZA
+    cvr_fuerte = df["percentil_cvr"] >= UMBRAL_FORTALEZA
+    stock_fuerte = df["percentil_stock"] >= UMBRAL_FORTALEZA
+    volumen_fuerte = df["percentil_volumen_stock"] >= UMBRAL_FORTALEZA
+
+    oferta_debil = ((df["percentil_stock"] < UMBRAL_BRECHA_OFERTA)
+                    | (df["percentil_volumen_stock"] < UMBRAL_BRECHA_OFERTA))
+    demanda_debil = ((df["venta_percentil"] < UMBRAL_BRECHA_DEMANDA)
+                     | (df["percentil_cvr"] < UMBRAL_BRECHA_DEMANDA))
+
+    perfil_b = (venta_fuerte | cvr_fuerte) & oferta_debil
+    perfil_c = stock_fuerte & volumen_fuerte & demanda_debil
+
+    perfil = pd.Series("", index=df.index)
+    perfil[perfil_b] = PERFIL_B
+    perfil[perfil_c] = PERFIL_C
+    return perfil
+
+
+def _motivo_farming(fila) -> str:
+    """Fortaleza + brecha con los datos del seller. Ej:
+    'Fortaleza: venta P85 ($12.300.000). Brecha: 35% de SKUs con stock (P22).'"""
+    dureza = fila["division_db"]
+    venta = f"venta {_pct(fila['venta_percentil'])} ({_pesos(fila['venta'])})"
+    cvr = f"CVR {_pct(fila['percentil_cvr'])} ({_texto(fila['cvr_seller'])})"
+    stock = f"{_texto(fila['pct_con_stock'])} de SKUs con stock ({_pct(fila['percentil_stock'])})"
+    volumen = f"{_num(fila['sku_stock'])} SKUs con stock ({_pct(fila['percentil_volumen_stock'])})"
+
+    if fila["perfil_farming"] == PERFIL_B:
+        fuertes = [t for t, ok in [(venta, fila["venta_percentil"] >= UMBRAL_FORTALEZA),
+                                   (cvr, fila["percentil_cvr"] >= UMBRAL_FORTALEZA)] if ok]
+        brechas = [t for t, ok in [(stock, fila["percentil_stock"] < UMBRAL_BRECHA_OFERTA),
+                                   (volumen, fila["percentil_volumen_stock"] < UMBRAL_BRECHA_OFERTA)] if ok]
+    elif fila["perfil_farming"] == PERFIL_C:
+        fuertes = [stock, volumen]
+        brechas = [t for t, ok in [(venta, fila["venta_percentil"] < UMBRAL_BRECHA_DEMANDA),
+                                   (cvr, fila["percentil_cvr"] < UMBRAL_BRECHA_DEMANDA)] if ok]
+    else:
+        return ""
+    return f"Fortaleza: {', '.join(fuertes)}. Brecha: {', '.join(brechas)}. (Percentiles en {dureza})"
+
+
 def priorizar_farming(df: pd.DataFrame) -> pd.DataFrame:
-    """Sellers potenciables para Farming, con prioridad dentro de su categoria."""
+    """Sellers con potencial para Farming, con perfil y prioridad dentro de su categoria."""
     # marca de Regalo SP (contexto para el AM), antes de dejar una fila por seller
     sp = filtrar_sp(df)
     regla_sp = sp.set_index(["seller_id", "division_db"])["regla_sp"]
 
     base = una_fila_por_seller(df)
-
-    potenciable = (
+    elegible = (
         base["estado_seller"].isin(ESTADOS_FARMING)
-        & base["segmento"].isin(SEGMENTOS_FARMING)
         & base["categoria_reputacion"].isin(REPUTACION_FARMING)
         & (base["sku_creados"] >= SKU_MIN_FARMING)
-        & (base["n_banderas"] >= 1)
     )
-    farm = base[potenciable].copy()
+    base = base[elegible].copy()
+    base["perfil_farming"] = asignar_perfil(base)
+    farm = base[base["perfil_farming"] != ""].copy()
 
+    farm["motivo_farming"] = farm.apply(_motivo_farming, axis=1)
+    farm["palanca_farming"] = farm["perfil_farming"].map(PALANCA_PERFIL)
     farm["regla_sp"] = [regla_sp.get((s, d), "") for s, d in zip(farm["seller_id"], farm["division_db"])]
     farm["regalo_sp"] = ["No" if r == "" else f"Si ({r})" for r in farm["regla_sp"]]
     farm["pts_para_subir_segmento"] = farm.apply(_pts_para_subir, axis=1)
 
-    farm = farm.sort_values(["categoria", "score", "venta"], ascending=[True, False, False])
+    farm = farm.sort_values(["categoria", "venta"], ascending=[True, False])
     farm["prioridad"] = farm.groupby("categoria").cumcount() + 1
-    if POOL_SEMANAL:
-        farm = farm[farm["prioridad"] <= POOL_SEMANAL]
+    if POOL_POR_CATEGORIA:
+        farm = farm[farm["prioridad"] <= POOL_POR_CATEGORIA]
     return farm
 
 
-def escribir_hoja_farming(df: pd.DataFrame, path: str = "score_growth.xlsx") -> pd.DataFrame:
-    farm = priorizar_farming(df)
-    tabla = farm[[c for c in COLS_FARMING if c in farm.columns]]
+def _estilo_encabezado(ws, cols):
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    header_font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+    thin = Side(style="thin", color="D9D9D9")
+    for j, col in enumerate(cols, start=1):
+        c = ws.cell(row=1, column=j, value=col)
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    wb = load_workbook(path)
+
+def _escribir_detalle(wb, tabla: pd.DataFrame):
     if NOMBRE_HOJA in wb.sheetnames:
         del wb[NOMBRE_HOJA]
     ws = wb.create_sheet(NOMBRE_HOJA)
 
-    header_fill = PatternFill("solid", fgColor="1F4E78")
-    header_font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+    cols = list(tabla.columns)
+    _estilo_encabezado(ws, cols)
+
     cell_font = Font(name="Arial", size=10)
     center = Alignment(horizontal="center", vertical="center")
     left = Alignment(horizontal="left", vertical="center")
     thin = Side(style="thin", color="D9D9D9")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-    cols = list(tabla.columns)
-    for j, col in enumerate(cols, start=1):
-        c = ws.cell(row=1, column=j, value=col)
-        c.fill = header_fill
-        c.font = header_font
-        c.alignment = center
-        c.border = border
+    color_perfil = {PERFIL_B: "DDEBF7", PERFIL_C: "FCE4D6"}   # azul claro / naranjo claro
 
     formatos = {"venta": "$#,##0", "total_invertido": "$#,##0", "score": "0",
                 "pts_para_subir_segmento": "0.0", "pct_skus_categoria": "0%"}
-    texto_largo = {"motivo", "accionable", "palanca", "flags", "name", "admin_email"}
+    texto_largo = {"motivo_farming", "palanca_farming", "flags", "name", "admin_email"}
 
     for i, (_, fila) in enumerate(tabla.iterrows(), start=2):
         for j, col in enumerate(cols, start=1):
@@ -156,36 +228,88 @@ def escribir_hoja_farming(df: pd.DataFrame, path: str = "score_growth.xlsx") -> 
             c.border = border
             if col in formatos and val is not None:
                 c.number_format = formatos[col]
-        color = COLOR_SEGMENTO.get(fila.get("segmento"))
-        if color and "segmento" in cols:
-            ws.cell(row=i, column=cols.index("segmento") + 1).fill = PatternFill("solid", fgColor=color)
+        if "segmento" in cols and COLOR_SEGMENTO.get(fila["segmento"]):
+            ws.cell(row=i, column=cols.index("segmento") + 1).fill = PatternFill(
+                "solid", fgColor=COLOR_SEGMENTO[fila["segmento"]])
+        if "perfil_farming" in cols and color_perfil.get(fila["perfil_farming"]):
+            ws.cell(row=i, column=cols.index("perfil_farming") + 1).fill = PatternFill(
+                "solid", fgColor=color_perfil[fila["perfil_farming"]])
 
-    anchos = {"motivo": 60, "accionable": 38, "palanca": 32, "flags": 34,
-              "name": 28, "admin_email": 30, "categoria": 18, "variable_debil": 20}
+    anchos = {"motivo_farming": 75, "palanca_farming": 45, "flags": 34, "name": 28,
+              "admin_email": 30, "categoria": 18, "perfil_farming": 16}
     for j, col in enumerate(cols, start=1):
         ws.column_dimensions[get_column_letter(j)].width = anchos.get(col, min(max(len(col), 12) + 2, 26))
 
     ws.auto_filter.ref = f"A1:{get_column_letter(len(cols))}{len(tabla) + 1}"
     ws.freeze_panes = "D2"   # deja fijas categoria, prioridad y seller_id
+
+
+def _escribir_resumen(wb, farm: pd.DataFrame):
+    """Tabla categoria x perfil (cuantos sellers con potencial tiene cada AM)."""
+    if NOMBRE_HOJA_RESUMEN in wb.sheetnames:
+        del wb[NOMBRE_HOJA_RESUMEN]
+    ws = wb.create_sheet(NOMBRE_HOJA_RESUMEN)
+
+    tabla = pd.crosstab(farm["categoria"], farm["perfil_farming"])
+    for p in (PERFIL_B, PERFIL_C):
+        if p not in tabla.columns:
+            tabla[p] = 0
+    tabla = tabla[[PERFIL_B, PERFIL_C]]
+    tabla["Total"] = tabla.sum(axis=1)
+    venta = farm.groupby("categoria")["venta"].sum()
+    tabla["Venta de estos sellers"] = venta.reindex(tabla.index)
+    tabla = tabla.sort_values("Total", ascending=False)
+    total = tabla.sum(numeric_only=True)
+    total.name = "Total"
+    tabla = pd.concat([tabla, total.to_frame().T])
+
+    cols = ["Categoría", f"{PERFIL_B} (B)", f"{PERFIL_C} (C)", "Total", "Venta de estos sellers"]
+    _estilo_encabezado(ws, cols)
+    cell_font = Font(name="Arial", size=10)
+    bold = Font(name="Arial", size=10, bold=True)
+    for i, (cat, fila) in enumerate(tabla.iterrows(), start=2):
+        valores = [cat, fila[PERFIL_B], fila[PERFIL_C], fila["Total"], fila["Venta de estos sellers"]]
+        for j, val in enumerate(valores, start=1):
+            c = ws.cell(row=i, column=j, value=val.item() if hasattr(val, "item") else val)
+            c.font = bold if cat == "Total" else cell_font
+            c.alignment = Alignment(horizontal="left" if j == 1 else "center")
+            if j == 5:
+                c.number_format = "$#,##0"
+    for j, ancho in enumerate([22, 18, 18, 10, 24], start=1):
+        ws.column_dimensions[get_column_letter(j)].width = ancho
+
+
+def escribir_hoja_farming(df: pd.DataFrame, path: str = "score_growth.xlsx") -> pd.DataFrame:
+    farm = priorizar_farming(df)
+    tabla = farm[[c for c in COLS_FARMING if c in farm.columns]]
+
+    wb = load_workbook(path)
+    _escribir_detalle(wb, tabla)
+    _escribir_resumen(wb, farm)
     wb.save(path)
 
-    print(f"Hoja '{NOMBRE_HOJA}' agregada: {len(tabla)} sellers potenciables")
+    print(f"Hojas '{NOMBRE_HOJA}' y '{NOMBRE_HOJA_RESUMEN}' agregadas: "
+          f"{len(farm)} sellers con potencial "
+          f"({(farm['perfil_farming'] == PERFIL_B).sum()} {PERFIL_B}, "
+          f"{(farm['perfil_farming'] == PERFIL_C).sum()} {PERFIL_C})")
     resumen_farming(farm)
     return farm
 
 
 def resumen_farming(farm: pd.DataFrame):
-    """Conteos en consola: cuantos sellers tiene cada AM y que variable atacar."""
+    """Conteos en consola: cuantos sellers tiene cada AM, por perfil y segmento."""
     with pd.option_context("display.max_columns", None, "display.width", 250):
-        print("\n=== FARMING: SELLERS POTENCIABLES POR CATEGORIA Y SEGMENTO ===")
-        print(pd.crosstab(farm["categoria"], farm["segmento"], margins=True, margins_name="Total"))
-        print("\n=== FARMING: VARIABLE DEBIL A ATACAR POR CATEGORIA ===")
-        print(pd.crosstab(farm["categoria"], farm["variable_debil"], margins=True, margins_name="Total"))
+        print("\n=== FARMING: SELLERS CON POTENCIAL POR CATEGORIA Y PERFIL ===")
+        print(pd.crosstab(farm["categoria"], farm["perfil_farming"], margins=True, margins_name="Total"))
+        print("\n=== FARMING: PERFIL POR SEGMENTO ===")
+        print(pd.crosstab(farm["perfil_farming"], farm["segmento"], margins=True, margins_name="Total"))
+        print("\n=== FARMING: PERFIL POR ESTADO ===")
+        print(pd.crosstab(farm["perfil_farming"], farm["estado_seller"], margins=True, margins_name="Total"))
 
 
 if __name__ == "__main__":
     # Requiere que score_growth.xlsx tenga la hoja "Score Growth" con categoria, y
-    # recalcula el perfilado para tener banderas y motivo.
+    # recalcula el perfilado para tener segmento y banderas.
     from Perfil import perfilar
     RUTA = "score_growth.xlsx"
     df = perfilar(pd.read_excel(RUTA, sheet_name="Score Growth"))

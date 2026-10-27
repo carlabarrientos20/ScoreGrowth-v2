@@ -124,4 +124,5 @@ if __name__ == "__main__":
     escribir_hoja_farming(largo, "score_growth.xlsx")
 
     print("\nListo: score_largo.csv y score_growth.xlsx "
-          "(hojas: Score Growth, Resumen, Regalo SP, Personalizado BD, Priorización de farming)")
+          "(hojas: Score Growth, Resumen, Regalo SP, Personalizado BD, "
+          "Priorización de farming, Resumen farming)")
