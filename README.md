@@ -74,10 +74,10 @@ Variables/*.py  ──►  main.py (une todo)  ──►  Scoring.py  ──► 
 | Publicado | `publish = 1` | En cada query |
 | Onboarding | Creado hace más de **90 días** | `DIAS_ONBOARDING` en `config.py` |
 | Horizonte | Últimos **90 días**, sin contar hoy | `HORIZONTE_DIARIO` en `config.py` |
-| Tramos | Bloques de **30 días** dentro del horizonte (con 90 días hay 3) | `TAMANO_TRAMO` en `config.py` |
+| Tramos | El horizonte se divide siempre en **3 tramos iguales** (con 90 días, de 30 días cada uno) | `TRAMOS_TOTALES` en `config.py` |
 
 - **Solo entran sellers con al menos una venta en el horizonte.** Venta, CVR y recurrencia se calculan desde las transacciones, así que un seller sin ventas no aparece. Es una decisión de diseño: el score mide la salud de sellers activos o recién apagados, no de los que ya se fueron.
-- **Tramos:** el tramo 0 son los últimos 30 días (de ayer hacia atrás), el tramo 1 los días 31 a 60 y el tramo 2 los días 61 a 90. Si el horizonte no es múltiplo de 30, el último tramo queda más corto.
+- **Tramos:** el horizonte se parte en 3 tramos iguales, contados hacia atrás desde ayer. Con 90 días, el tramo 0 son los últimos 30 días, el tramo 1 los días 31 a 60 y el tramo 2 los días 61 a 90. Con 30 días serían 3 tramos de 10 días, y con 180 días, 3 de 60. Si el horizonte no es divisible por 3, los tramos más recientes quedan con un día más. Así las reglas "2 de 3" y "3 de 3" funcionan con cualquier horizonte.
 
 ---
 
@@ -130,15 +130,16 @@ Los percentiles se calculan con `PERCENT_RANK` **dentro de cada dureza**, redond
   - `dias_vendidos`: días distintos con al menos una venta en el horizonte.
   - `recurrencia`: `dias_vendidos / dias del horizonte` (0 a 1). Es informativa y **no entra al score**.
   - `percentil_recurrencia`: percentil de `dias_vendidos` dentro de la dureza. **Esto es lo que entra al score.**
-  - `tramos_con_venta`: en cuántos tramos de 30 días vendió al menos una vez (0 a 3 con 90 días).
+  - `tramos_con_venta`: en cuántos de los 3 tramos del horizonte vendió al menos una vez (0 a 3). **No entra al score.**
 - **Se usa en:**
   - Score (15%) con `percentil_recurrencia`. Los sellers en estado **Primera venta** reciben 50 (neutro) porque no tienen historia para medir frecuencia.
-  - Bandera `flag_intermitente`: `tramos_con_venta` < 2. El mínimo es 2/3 de los tramos redondeado hacia arriba (`UMBRAL_TRAMOS` en `Perfil.py`).
+  - Bandera `flag_intermitente`: `tramos_con_venta` < 2 (`UMBRAL_TRAMOS` en `Perfil.py`).
   - Tratamientos: Regla A pide ≥ 2 tramos y Regla B los 3 tramos.
+- **Por qué hay dos medidas de frecuencia:** miden cosas distintas. Los días miden **cuánto** vende el seller; los tramos miden si vende de forma **constante** o concentrada. Dos sellers con 20 días de venta tienen el mismo percentil, pero si uno vendió los 20 días en el último mes (1 tramo) y el otro ~7 días cada mes (3 tramos), comercialmente son distintos. El score usa los días porque necesita muchos valores para ordenar sellers (los tramos solo van de 1 a 3 y casi todos los activos tendrían 3). Las banderas y los tratamientos usan los tramos porque son reglas de sí/no fáciles de explicar ("vendió en al menos 2 de 3 periodos"). Usar las dos en el score contaría la frecuencia dos veces.
 - **Limitaciones:**
   - Muchos sellers venden pocos días, y `PERCENT_RANK` les da el mismo percentil a los empates. Todos los que vendieron 1 solo día comparten el percentil más bajo de su dureza.
-  - Los tramos son bloques móviles de 30 días, no meses calendario. No calzan exactamente con el estado del seller, que sí usa meses calendario.
-  - Con un horizonte de 30 días o menos hay un solo tramo y la bandera de frecuencia nunca se activa.
+  - Los tramos son bloques móviles (tercios del horizonte), no meses calendario. No calzan exactamente con el estado del seller, que sí usa meses calendario.
+  - Con horizontes muy cortos los tramos quedan de pocos días (con 7 días, de 2 a 3 días cada uno) y medir constancia pierde sentido. Se recomienda un horizonte de al menos 30 días.
   - Los sellers en Primera venta casi siempre quedan con la bandera de frecuencia activa, porque tienen poca historia.
 
 ### 5. CVR (`Variables/CVR.py`)
@@ -235,7 +236,7 @@ La hoja *Resumen* muestra todas las banderas activas (`flags`), cuántas son (`n
 |---|---|---|
 | Segmento | Medio - Alto o Medio | Alto o Medio - Alto |
 | Estado | Dormant | Activo |
-| Tramos de 30 días con venta | ≥ 2 de 3 | 3 de 3 |
+| Tramos con venta | ≥ 2 de 3 | 3 de 3 |
 | Percentil CVR | — | ≥ 60 |
 | SKUs creados | ≥ 5 | ≥ 5 |
 | Reputación | Medio, Bueno, Destacado o Plan Growth | Medio, Bueno, Destacado o Plan Growth |
@@ -248,12 +249,12 @@ Los parámetros están al inicio de `Tratamiento.py`.
 
 ## Limitaciones generales
 
-1. **Solo sellers con venta en el horizonte.** Los sellers sin ventas en los últimos 90 días no tienen score.
+1. **Solo sellers con venta en el horizonte.** Los sellers sin ventas en el horizonte (90 días por defecto) no tienen score.
 2. **El score es relativo.** Todo son percentiles dentro de la dureza, así que el score mide la posición frente a los pares. Un mismo score en dos fechas distintas no significa el mismo desempeño absoluto.
 3. **El grupo `otros` es muy chico** (12 filas el 27-10-2026). Sus percentiles se calculan igual, pero son poco confiables.
-4. **Mezcla de cortes temporales:** venta, CVR, frecuencia e inversión usan los últimos 90 días; el estado usa meses calendario; catálogo y reputación son una foto del día.
+4. **Mezcla de cortes temporales:** venta, CVR, frecuencia e inversión usan el horizonte en días; el estado usa meses calendario; catálogo y reputación son una foto del día.
 5. **Valores faltantes:** si falta venta, stock o volumen, ese componente aporta 0. CVR sin visitas y Primera venta reciben 50.
-6. **Cortes de segmento fijos.** Se calibraron una vez con la data del 27-10-2026. No se ajustan solos.
+6. **Cortes de segmento fijos.** Se calibraron una vez con la data del 27-10-2026 y un horizonte de 90 días. No se ajustan solos. Con otro horizonte los percentiles siguen en la misma escala, pero algunas variables cambian de reparto (por ejemplo, en 30 días invierten menos sellers que en 90), así que conviene revisar cuántos sellers quedan en cada segmento.
 7. **Sin pruebas automáticas contra Redshift.** Antes de usar una salida para una acción comercial, conviene revisar los conteos que imprime la consola.
 
 ---
@@ -265,8 +266,7 @@ Los parámetros están al inicio de `Tratamiento.py`.
 | `DUROS` / `BLANDOS` | Listas de divisiones | Clasificación de dureza |
 | `DIAS_ONBOARDING` | 90 | Antigüedad mínima del seller |
 | `HORIZONTE_DIARIO` | 90 | Días del horizonte |
-| `TAMANO_TRAMO` | 30 | Días por tramo |
-| `TRAMOS_TOTALES` | 3 (calculado) | Tramos en el horizonte |
+| `TRAMOS_TOTALES` | 3 | En cuántos tramos iguales se divide el horizonte (si se cambia, hay que revisar `UMBRAL_TRAMOS` en `Perfil.py` y `TRAMOS_MIN_*` en `Tratamiento.py`) |
 | `HORIZONTE_MESES` | 3 | Ya no se usa |
 
 Los pesos están en `Scoring.py`. Los cortes de segmento y los umbrales de las banderas están en `Perfil.py`. Los criterios de tratamiento están en `Tratamiento.py`.
@@ -304,9 +304,10 @@ El repo anterior ya había pasado de 3 meses calendario a días móviles. La v2 
 |---|---|---|
 | Frecuencia en el score | Días con venta / 90 (la mediana quedó en 0,10 y bajó todos los scores) | Percentil de días con venta dentro de la dureza |
 | Frecuencia de Primera venta | 100 (quedaban sobre los Activos) | 50 (neutro) |
-| Bandera de frecuencia | `dias_vendidos < 1` (nunca se activaba) | Vendió en menos de 2 de 3 tramos de 30 días |
+| Bandera de frecuencia | `dias_vendidos < 1` (nunca se activaba) | Vendió en menos de 2 de los 3 tramos del horizonte |
 | Bandera de venta | P60 | P40 |
-| Reglas de Regalo SP | ≥ 60 y ≥ 90 días con venta (casi nadie calificaba) | ≥ 2 y 3 de 3 tramos de 30 días con venta |
+| Reglas de Regalo SP | ≥ 60 y ≥ 90 días con venta (casi nadie calificaba) | ≥ 2 y 3 de los 3 tramos del horizonte con venta |
+| Tramos | — | Siempre 3 tramos iguales, sirve para cualquier horizonte |
 | CVR | Ventana de 91 días; sin visitas = 0 | Ventana de 90 días; sin visitas = 50 (neutro) |
 | Cortes de segmento | 70 / 53 / 37 | 68 / 46 / 32 |
 | Conexión | Sin reintentos | Hasta 3 reintentos ante cortes de red |

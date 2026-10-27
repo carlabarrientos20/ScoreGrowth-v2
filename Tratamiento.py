@@ -8,8 +8,9 @@ Genera dos listas filtradas a partir de la tabla larga (con score + perfilado):
 
 Criterios
 ---------
-Con horizonte diario, los "meses" se reemplazan por tramos de 30 dias
-(tramos_con_venta, ver Recurrencia_venta.py). Con 90 dias hay 3 tramos.
+Con horizonte diario, los "meses" se reemplazan por tramos: el horizonte se divide
+siempre en 3 tramos iguales (con 90 dias, de 30 dias cada uno). Ver tramos_con_venta
+en Recurrencia_venta.py.
 
 Regalo SP  (basta cumplir Regla A O Regla B):
 
@@ -39,15 +40,13 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import TRAMOS_TOTALES
-
 
 # ---- parametros de los criterios (editar aca si cambian) ----
 REPUTACION_OK = ["Bueno", "Destacado", "Plan Growth"]
 REPUTACION_SP = ["Medio","Bueno", "Destacado", "Plan Growth"]
 SKU_MIN = 5
-TRAMOS_MIN_DORMANT = TRAMOS_TOTALES - 1  # con 90 dias: 2 de 3 tramos de 30 dias con venta
-TRAMOS_MIN_ACTIVO = TRAMOS_TOTALES       # con 90 dias: vendio en los 3 tramos
+TRAMOS_MIN_DORMANT = 2   # vendio en al menos 2 de los 3 tramos del horizonte
+TRAMOS_MIN_ACTIVO = 3    # vendio en los 3 tramos del horizonte
 PERCENTIL_CVR_MIN = 60
 
 COLS_TRATAMIENTO = ["seller_id", "name", "estado_seller", "admin_email", "categoria_reputacion",

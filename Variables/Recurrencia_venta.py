@@ -7,8 +7,9 @@ Mide en cuantos dias del horizonte el seller efectivamente vendio.
   percentil_recurrencia = percentil de dias_vendidos dentro de su dureza (0 a 100).
                           Es lo que entra al score, igual que las demas variables.
 
-Ademas entrega tramos_con_venta: en cuantos tramos de 30 dias del horizonte
-vendio al menos una vez (con 90 dias: 0 a 3). Lo usan la bandera de frecuencia
+Ademas entrega tramos_con_venta: el horizonte se divide en 3 tramos iguales
+(con 90 dias, de 30 dias cada uno) y se cuenta en cuantos vendio al menos
+una vez (0 a 3). No entra al score: lo usan la bandera de frecuencia
 (Perfil.py) y las reglas de Regalo SP (Tratamiento.py).
 """
 
@@ -19,7 +20,7 @@ from config import (
     DUROS,
     BLANDOS,
     DIAS_ONBOARDING,
-    TAMANO_TRAMO
+    TRAMOS_TOTALES
 )
 
 _duros_sql = ", ".join(f"'{d}'" for d in DUROS)
@@ -44,8 +45,9 @@ meses_con_venta AS (
             ELSE 'otros'
         END AS division_db,
         COUNT(DISTINCT DATE_TRUNC('day', t.fecha_venta)) AS dias_vendidos,
-        -- tramo 0 = ayer hasta hace 30 dias, tramo 1 = 31-60 dias, tramo 2 = 61-90 dias (division entera)
-        COUNT(DISTINCT (DATEDIFF(day, t.fecha_venta, CURRENT_DATE) - 1) / {TAMANO_TRAMO}) AS tramos_con_venta
+        -- El horizonte se parte en {TRAMOS_TOTALES} tramos iguales hacia atras desde ayer (division entera).
+        -- Con 90 dias: tramo 0 = ultimos 30 dias, tramo 1 = dias 31-60, tramo 2 = dias 61-90.
+        COUNT(DISTINCT (DATEDIFF(day, t.fecha_venta, CURRENT_DATE) - 1) * {TRAMOS_TOTALES} / {HORIZONTE_DIARIO}) AS tramos_con_venta
     FROM cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp t
     INNER JOIN sellers_validos s
         ON t.seller_id = s.seller_id
@@ -86,6 +88,6 @@ if __name__ == "__main__":
     print(df["recurrencia"].describe())
     print("\nPercentil de recurrencia (mediana por dureza):")
     print(df.groupby("division_db")["percentil_recurrencia"].median())
-    print("\nSellers por tramos con venta:")
+    print(f"\nSellers por tramos con venta ({TRAMOS_TOTALES} tramos de ~{HORIZONTE_DIARIO / TRAMOS_TOTALES:.0f} dias):")
     print(df["tramos_con_venta"].value_counts().sort_index())
     print("\n", df.head(50))

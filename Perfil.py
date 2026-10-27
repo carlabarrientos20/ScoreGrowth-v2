@@ -14,8 +14,6 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import TRAMOS_TOTALES
-
 
 # ======================================================================
 # CAPA 1 - SEGMENTACION POR SCORE  (cortes fijos, continuos, sin huecos)
@@ -49,14 +47,12 @@ def clasificar_segmento(score: float) -> str:
 #   Venta              venta_percentil          < 40  (P40)
 #   SKU con stock      percentil_stock          < 60  (P60)
 #   Volumen SKU        percentil_volumen_stock  < 60  (P60)
-#   Frecuencia venta   tramos_con_venta         < 2   (con 90 dias: vendio en menos de 2 de los 3 tramos)
+#   Frecuencia venta   tramos_con_venta         < 2   (vendio en menos de 2 de los 3 tramos del horizonte)
 #   CVR                percentil_cvr            < 40  (P40)
 #   Inversion          invirtio == "no"
 UMBRAL_PERCENTIL = 40
 UMBRAL_PERCENTIL_SKU = 60
-# Minimo de tramos con venta para NO ser intermitente: 2/3 de los tramos, redondeado
-# hacia arriba. 3 tramos (90 dias) -> 2 | 2 tramos (60 dias) -> 2 | 4 tramos (120 dias) -> 3
-UMBRAL_TRAMOS = -(-TRAMOS_TOTALES * 2 // 3)
+UMBRAL_TRAMOS = 2   # minimo de tramos (de 3) con venta para NO ser intermitente, sirve para cualquier horizonte
 
 
 FLAGS = ["flag_venta_baja", "flag_stock_bajo", "flag_catalogo_bajo",

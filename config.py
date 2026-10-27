@@ -16,8 +16,9 @@ DIAS_ONBOARDING = 90   # un seller entra al análisis tras 90 días de creado
 HORIZONTE_MESES = 3    # ventana de 3 meses cerrados -> ya no se usa 
 HORIZONTE_DIARIO = 90  #Cambio de granularidad temporal de meses a días para entregar la posibilidad de calcular el score en cualquier horizonte temporal de forma diaria
 
-# --- Tramos de 30 días dentro del horizonte (reemplazan a los "meses" en los tratamientos) ---
-# Con 90 días: tramo 0 = últimos 30 días, tramo 1 = días 31-60, tramo 2 = días 61-90.
-# Si el horizonte no es múltiplo de 30, el último tramo queda más corto.
-TAMANO_TRAMO = 30
-TRAMOS_TOTALES = -(-HORIZONTE_DIARIO // TAMANO_TRAMO)   # división hacia arriba: 90 -> 3, 60 -> 2, 45 -> 2
+# --- Tramos dentro del horizonte (miden constancia de venta) ---
+# El horizonte SIEMPRE se divide en 3 tramos iguales, contados hacia atrás desde ayer:
+#   90 días -> 3 tramos de 30 | 60 días -> 3 de 20 | 30 días -> 3 de 10 | 180 días -> 3 de 60
+# Si el horizonte no es divisible por 3, los tramos más recientes quedan con 1 día más.
+# Los usan la bandera de frecuencia (Perfil.py: menos de 2 de 3) y Regalo SP (Tratamiento.py).
+TRAMOS_TOTALES = 3
