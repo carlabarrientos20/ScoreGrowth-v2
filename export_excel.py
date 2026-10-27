@@ -11,8 +11,8 @@ from openpyxl.utils import get_column_letter
 
 COLS_PERCENTIL = ["venta_percentil", "percentil_cvr", "percentil_stock", "percentil_volumen_stock",
                   "percentil_recurrencia", "score"]
-COLS_PLATA = ["venta", "total_invertido"]
-COLS_PCT = ["margen_pct"]
+COLS_PLATA = ["venta", "total_invertido", "venta_ult_30d", "venta_30d_anterior"]
+COLS_PCT = ["margen_pct", "variacion_venta_30d"]
 COLS_SEMAFORO = ["dias_vendidos", "tramos_con_venta"]
 
 

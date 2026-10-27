@@ -79,6 +79,7 @@ COLS_FARMING = ["categoria", "prioridad", "seller_id", "name", "admin_email",
                 "score", "segmento", "pts_para_subir_segmento",
                 "flags", "regalo_sp",
                 "venta", "venta_percentil",
+                "tendencia_venta", "variacion_venta_30d", "venta_ult_30d", "venta_30d_anterior",
                 "cvr_seller", "percentil_cvr",
                 "sku_creados", "sku_stock", "pct_con_stock",
                 "percentil_stock", "percentil_volumen_stock",
@@ -214,6 +215,7 @@ def _escribir_detalle(wb, tabla: pd.DataFrame):
     color_perfil = {PERFIL_B: "DDEBF7", PERFIL_C: "FCE4D6"}   # azul claro / naranjo claro
 
     formatos = {"venta": "$#,##0", "total_invertido": "$#,##0", "score": "0",
+                "venta_ult_30d": "$#,##0", "venta_30d_anterior": "$#,##0", "variacion_venta_30d": "0%",
                 "pts_para_subir_segmento": "0.0", "pct_skus_categoria": "0%"}
     texto_largo = {"motivo_farming", "palanca_farming", "flags", "name", "admin_email"}
 
@@ -236,7 +238,7 @@ def _escribir_detalle(wb, tabla: pd.DataFrame):
                 "solid", fgColor=color_perfil[fila["perfil_farming"]])
 
     anchos = {"motivo_farming": 75, "palanca_farming": 45, "flags": 34, "name": 28,
-              "admin_email": 30, "categoria": 18, "perfil_farming": 16}
+              "admin_email": 30, "categoria": 18, "perfil_farming": 16, "tendencia_venta": 24}
     for j, col in enumerate(cols, start=1):
         ws.column_dimensions[get_column_letter(j)].width = anchos.get(col, min(max(len(col), 12) + 2, 26))
 

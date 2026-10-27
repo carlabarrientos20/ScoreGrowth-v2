@@ -14,6 +14,7 @@ import Variables.Carga_SKU as Carga_SKU
 import Variables.Recurrencia_venta as Recurrencia
 import Variables.Reputacion as Reputacion
 import Variables.Categoria as Categoria
+import Variables.Tendencia as Tendencia
 from Tratamiento import escribir_hojas_tratamiento
 from Farming import escribir_hoja_farming
 
@@ -70,6 +71,14 @@ def tabla_larga() -> pd.DataFrame:
     cat = Categoria.calcular()
     df = df.merge(cat[["seller_id", "categoria", "pct_skus_categoria"]], on="seller_id", how="left")
 
+    print("=== TENDENCIA DE VENTA (30 vs 30 DÍAS) ===")
+    ten = Tendencia.calcular()
+    df = df.merge(ten[["seller_id", "division_db", "venta_ult_30d", "venta_30d_anterior",
+                       "variacion_venta_30d", "tendencia_venta"]],
+                  on=["seller_id", "division_db"], how="left")
+    df["tendencia_venta"] = df["tendencia_venta"].fillna("Sin venta en 60 dias")
+    df[["venta_ult_30d", "venta_30d_anterior"]] = df[["venta_ult_30d", "venta_30d_anterior"]].fillna(0)
+
     print("=== TABLA LARGA CALCULADA ===")
     df = df.sort_values(["seller_id", "division_db"]).reset_index(drop=True)
 
@@ -77,6 +86,7 @@ def tabla_larga() -> pd.DataFrame:
              "estado_seller", "categoria_reputacion",
              "division_db", "score",
          "venta", "venta_percentil",
+         "tendencia_venta", "variacion_venta_30d", "venta_ult_30d", "venta_30d_anterior",
          "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
          "cvr_seller", "percentil_cvr",
          "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",
@@ -105,6 +115,7 @@ if __name__ == "__main__":
     orden = ["seller_id", "name", "admin_email", "categoria", "estado_seller", "categoria_reputacion",
               "division_db", "score", "segmento",
          "venta", "venta_percentil",
+         "tendencia_venta", "variacion_venta_30d", "venta_ult_30d", "venta_30d_anterior",
          "dias_vendidos", "tramos_con_venta", "recurrencia", "percentil_recurrencia",
          "cvr_seller", "percentil_cvr",
          "sku_creados", "sku_stock", "pct_con_stock", "percentil_stock", "percentil_volumen_stock",

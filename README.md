@@ -65,7 +65,7 @@ Variables/*.py  ──►  main.py (une todo)  ──►  Scoring.py  ──► 
 ```
 
 1. Cada módulo de `Variables/` corre una query y devuelve una tabla por `seller_id` (+ `division_db` cuando aplica).
-2. `main.py` une venta, CVR y recurrencia (outer join) y después agrega catálogo, inversión, estado, reputación y categoría (left join).
+2. `main.py` une venta, CVR y recurrencia (outer join) y después agrega catálogo, inversión, estado, reputación, categoría y tendencia de venta (left join).
 3. `Scoring.py` calcula el score ponderado.
 4. `Perfil.py` asigna segmento, banderas, variable débil, motivo, accionable y palanca, y escribe la hoja *Resumen*.
 5. `Tratamiento.py` filtra y escribe las hojas *Regalo SP* y *Personalizado BD*.
@@ -207,6 +207,26 @@ No entra al score. Clasifica a cada seller según el **último mes calendario ce
   - Es una foto del catálogo del día en que se corre.
   - Un seller muy diversificado (`pct_skus_categoria` bajo) queda asignado a una sola categoría aunque venda en varias.
 
+### Contexto: Tendencia de venta (`Variables/Tendencia.py`)
+
+- **Fuente:** `cencosud_chile_txd_reporter.vm_new_report_transaccion_mkp`
+- **Cálculo:** venta de los últimos 30 días (`venta_ult_30d`) contra la de los 30 días anteriores (`venta_30d_anterior`), por seller y dureza. `variacion_venta_30d` es el cambio porcentual. `tendencia_venta` lo resume:
+
+| Tendencia | Condición |
+|---|---|
+| Subiendo | Variación ≥ +20% |
+| Estable | Entre -20% y +20% |
+| Bajando | Variación ≤ -20% |
+| Sin venta ultimos 30 dias | Vendió en los 30 días anteriores, pero no en los últimos 30 |
+| Retomo venta | Vendió en los últimos 30 días, pero no en los 30 anteriores |
+| Sin venta en 60 dias | No vendió en ninguno de los dos periodos |
+
+- **Para qué sirve:** el score mira 90 días y se mueve lento, porque de un mes a otro se repiten dos tercios de la ventana. La tendencia muestra si el seller viene subiendo o bajando ahora. **No entra al score.** Aparece en las hojas *Score Growth* y *Priorización de farming*, y es la primera señal para el pronóstico de fuga.
+- **Parámetros:** `DIAS_TENDENCIA = 30` y `UMBRAL_TENDENCIA = 0.2` en `config.py`. Son independientes del horizonte del score.
+- **Limitaciones:**
+  - En sellers que venden poco, la variación salta mucho: pasar de $10.000 a $20.000 es +100%. Conviene mirarla junto a `venta_ult_30d`.
+  - Le afecta la estacionalidad: en noviembre y diciembre muchos sellers van a aparecer "Subiendo" por Black Friday y Navidad.
+
 ### No se usa: Rentabilidad (`Variables/Rentabilidad.py`)
 
 Lee un Google Sheet con venta facturada y margen por seller. **No está conectada al pipeline.** Si se quiere usar, hay que adaptarla: el horizonte sigue fijo en 3 meses calendario y el onboarding está escrito como 90 días en vez de usar `config.py`.
@@ -308,6 +328,7 @@ Los umbrales de brecha son los mismos de las banderas (P60 para stock y volumen,
 | `score`, `segmento`, `pts_para_subir_segmento` | Dónde está el seller y cuántos puntos le faltan para subir de segmento (vacío si ya es Alto) |
 | `flags` | Todas sus variables débiles |
 | `regalo_sp` | Si además califica para Regalo SP (y por qué regla) |
+| `tendencia_venta`, `variacion_venta_30d` | Si el seller viene subiendo o bajando en los últimos 30 días frente a los 30 anteriores |
 | Resto | Los KPIs de cada variable, para conversar con el seller |
 
 **Parámetros** (al inicio de `Farming.py`): filtros básicos (`ESTADOS_FARMING`, `REPUTACION_FARMING`, `SKU_MIN_FARMING`), umbral de fortaleza (`UMBRAL_FORTALEZA = 60`), palancas por perfil (`PALANCA_PERFIL`) y `POOL_POR_CATEGORIA`. Con `POOL_POR_CATEGORIA = 30`, por ejemplo, la hoja deja solo los 30 primeros de cada categoría. Con `None` muestra a todos.
@@ -344,6 +365,8 @@ Con los datos del 27-10-2026 había **≈ 1.150 sellers con potencial**: ≈ 860
 | `DIAS_ONBOARDING` | 90 | Antigüedad mínima del seller |
 | `HORIZONTE_DIARIO` | 90 | Días del horizonte |
 | `TRAMOS_TOTALES` | 3 | En cuántos tramos iguales se divide el horizonte (si se cambia, hay que revisar `UMBRAL_TRAMOS` en `Perfil.py` y `TRAMOS_MIN_*` en `Tratamiento.py`) |
+| `DIAS_TENDENCIA` | 30 | Días de cada periodo en la tendencia de venta (30 vs 30 anteriores) |
+| `UMBRAL_TENDENCIA` | 0,2 | ±20% separa Subiendo / Estable / Bajando |
 | `HORIZONTE_MESES` | 3 | Ya no se usa |
 
 Los pesos están en `Scoring.py`. Los cortes de segmento y los umbrales de las banderas están en `Perfil.py`. Los criterios de tratamiento están en `Tratamiento.py`.

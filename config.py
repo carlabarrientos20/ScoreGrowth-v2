@@ -22,3 +22,9 @@ HORIZONTE_DIARIO = 90  #Cambio de granularidad temporal de meses a días para en
 # Si el horizonte no es divisible por 3, los tramos más recientes quedan con 1 día más.
 # Los usan la bandera de frecuencia (Perfil.py: menos de 2 de 3) y Regalo SP (Tratamiento.py).
 TRAMOS_TOTALES = 3
+
+# --- Tendencia de venta (contexto, no entra al score) ---
+# Compara la venta de los últimos DIAS_TENDENCIA días contra los DIAS_TENDENCIA anteriores.
+# Es independiente del horizonte del score.
+DIAS_TENDENCIA = 30
+UMBRAL_TENDENCIA = 0.2   # +20% o más = "Subiendo" | -20% o menos = "Bajando" | entre medio = "Estable"
