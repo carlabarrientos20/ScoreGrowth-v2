@@ -306,10 +306,13 @@ No se filtra por segmento: entran también los sellers Alto, porque el equipo de
 
 **3. Perfiles de potencial.** Los umbrales de debilidad dicen qué atacar; los de potencial dicen en qué se apoya el seller. Un seller tiene potencial si tiene una **fortaleza** (variable ≥ P60) y una **brecha** relacionada. Los percentiles son dentro de su dureza.
 
+- **Oferta** = lo que el seller pone a la venta: **disponibilidad** (SKU con stock: % de su catálogo que tiene stock) y **volumen** (Volumen SKU: cantidad de productos con stock).
+- **Demanda** = lo que los clientes le compran: **venta** y **conversión** (CVR).
+
 | Perfil | Fortaleza | Brecha | Qué significa | Palanca |
 |---|---|---|---|---|
-| **B. Falta oferta** | Venta ≥ P60 **o** CVR ≥ P60 | SKU con stock < P60 **o** Volumen SKU < P60 | Sus productos se venden o convierten bien, pero tiene poco para vender | Que cargue stock y amplíe catálogo (revisar lo que tiene en otros marketplaces), descuento en comisión |
-| **C. Falta demanda** | SKU con stock ≥ P60 **y** Volumen SKU ≥ P60 | Venta < P40 **o** CVR < P40 | Tiene catálogo y stock, pero vende o convierte poco | Precio competitivo, descuento con tarjeta, SP |
+| **Falta oferta** | Venta ≥ P60 **o** CVR ≥ P60 | SKU con stock < P60 **o** Volumen SKU < P60 | Sus productos se venden o convierten bien, pero tiene poco para vender | Que cargue stock y amplíe catálogo (revisar lo que tiene en otros marketplaces), descuento en comisión |
+| **Falta demanda** | SKU con stock ≥ P60 **y** Volumen SKU ≥ P60 | Venta < P40 **o** CVR < P40 | Tiene catálogo y stock, pero vende o convierte poco | Precio competitivo, descuento con tarjeta, SP |
 
 Los umbrales de brecha son los mismos de las banderas (P60 para stock y volumen, P40 para venta y CVR). Un seller no puede estar en los dos perfiles a la vez. Frecuencia e Inversión no se usan en los perfiles.
 
@@ -320,14 +323,13 @@ Los umbrales de brecha son los mismos de las banderas (P60 para stock y volumen,
 | Columna | Qué le dice al AM |
 |---|---|
 | `categoria`, `prioridad` | A qué AM le toca y en qué orden contactarlo |
-| `perfil_farming` | Falta oferta (B) o Falta demanda (C) |
-| `motivo_farming` | Fortaleza y brecha con los datos del seller. Ej: *"Fortaleza: venta P97 ($9.270.516), CVR P91 (2.00%). Brecha: 31.83% de SKUs con stock (P33)."* |
+| `perfil_farming` | Falta oferta o Falta demanda |
+| `motivo_farming` | Qué tiene el seller (fortaleza) y qué le falta (brecha), con sus datos y su percentil. Ej: *"Tiene oferta: buena disponibilidad (58% de su catálogo tiene stock, P60) y buen volumen (247 productos con stock, P93). Le falta demanda: baja conversión (0,44% de las visitas termina en compra, P39). Percentiles frente a sellers blandos."* |
 | `palanca_farming` | Qué ofrecerle según el perfil |
 | `estado_seller` | Activo, Reactivado o Dormant (con un Dormant la conversación parte por "¿por qué dejaste de vender?") |
 | `pct_skus_categoria` | Qué parte del catálogo del seller está en esa categoría |
 | `score`, `segmento`, `pts_para_subir_segmento` | Dónde está el seller y cuántos puntos le faltan para subir de segmento (vacío si ya es Alto) |
 | `flags` | Todas sus variables débiles |
-| `regalo_sp` | Si además califica para Regalo SP (y por qué regla) |
 | `tendencia_venta`, `variacion_venta_30d` | Si el seller viene subiendo o bajando en los últimos 30 días frente a los 30 anteriores |
 | Resto | Los KPIs de cada variable, para conversar con el seller |
 

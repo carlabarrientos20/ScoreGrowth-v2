@@ -21,14 +21,18 @@ Como se arma
 3. Perfil de potencial (percentiles dentro de la dureza). Un seller entra si
    cumple uno de los dos (no se pueden cumplir ambos a la vez):
 
-   B - Falta oferta:  FORTALEZA en demanda   Venta >= P60  o  CVR >= P60
-                      BRECHA en oferta       SKU con stock < P60  o  Volumen SKU < P60
+   Oferta  = lo que el seller pone a la venta: disponibilidad (SKU con stock, % del
+             catalogo con stock) y volumen (Volumen SKU, cantidad de productos con stock).
+   Demanda = lo que los clientes le compran: venta y conversion (CVR).
+
+   Falta oferta:   FORTALEZA en demanda   Venta >= P60  o  CVR >= P60
+                   BRECHA en oferta       SKU con stock < P60  o  Volumen SKU < P60
        -> sus productos se venden / convierten, pero tiene poco para vender.
           Palanca: que cargue stock y amplie catalogo (revisar lo que tiene en
           otros marketplaces), descuento en comision.
 
-   C - Falta demanda: FORTALEZA en oferta    SKU con stock >= P60  y  Volumen SKU >= P60
-                      BRECHA en demanda      Venta < P40  o  CVR < P40
+   Falta demanda:  FORTALEZA en oferta    SKU con stock >= P60  y  Volumen SKU >= P60
+                   BRECHA en demanda      Venta < P40  o  CVR < P40
        -> tiene catalogo y stock, pero vende o convierte poco.
           Palanca: precio competitivo, descuento con tarjeta, SP.
 
@@ -44,11 +48,10 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import DUROS, BLANDOS
+from config import DUROS, BLANDOS, HORIZONTE_DIARIO
 from Perfil import (CORTE_ALTO, CORTE_MEDIO_ALTO, CORTE_MEDIO, COLOR_SEGMENTO,
                     UMBRAL_PERCENTIL, UMBRAL_PERCENTIL_SKU,
                     _pct, _pesos, _num, _texto)
-from Tratamiento import filtrar_sp
 
 
 # ---- filtros basicos (editar aca si cambian) ----
@@ -61,11 +64,11 @@ UMBRAL_FORTALEZA = 60                        # variable fuerte si su percentil e
 UMBRAL_BRECHA_OFERTA = UMBRAL_PERCENTIL_SKU  # stock / volumen debil si < P60 (mismo umbral que las banderas)
 UMBRAL_BRECHA_DEMANDA = UMBRAL_PERCENTIL     # venta / CVR debil si < P40 (mismo umbral que las banderas)
 
-PERFIL_B = "Falta oferta"
-PERFIL_C = "Falta demanda"
+PERFIL_OFERTA = "Falta oferta"
+PERFIL_DEMANDA = "Falta demanda"
 PALANCA_PERFIL = {
-    PERFIL_B: "Cargar stock y ampliar catalogo (revisar otros marketplaces) + dscto en comision",
-    PERFIL_C: "Precio competitivo + dscto con tarjeta + SP",
+    PERFIL_OFERTA: "Cargar stock y ampliar catalogo (revisar otros marketplaces) + dscto en comision",
+    PERFIL_DEMANDA: "Precio competitivo + dscto con tarjeta + SP",
 }
 
 POOL_POR_CATEGORIA = None   # ej: 30 -> solo los 30 primeros de cada categoria. None = todos
@@ -77,7 +80,7 @@ COLS_FARMING = ["categoria", "prioridad", "seller_id", "name", "admin_email",
                 "perfil_farming", "motivo_farming", "palanca_farming",
                 "estado_seller", "categoria_reputacion", "pct_skus_categoria", "division_db",
                 "score", "segmento", "pts_para_subir_segmento",
-                "flags", "regalo_sp",
+                "flags",
                 "venta", "venta_percentil",
                 "tendencia_venta", "variacion_venta_30d", "venta_ult_30d", "venta_30d_anterior",
                 "cvr_seller", "percentil_cvr",
@@ -126,44 +129,59 @@ def asignar_perfil(df: pd.DataFrame) -> pd.Series:
     demanda_debil = ((df["venta_percentil"] < UMBRAL_BRECHA_DEMANDA)
                      | (df["percentil_cvr"] < UMBRAL_BRECHA_DEMANDA))
 
-    perfil_b = (venta_fuerte | cvr_fuerte) & oferta_debil
-    perfil_c = stock_fuerte & volumen_fuerte & demanda_debil
+    falta_oferta = (venta_fuerte | cvr_fuerte) & oferta_debil
+    falta_demanda = stock_fuerte & volumen_fuerte & demanda_debil
 
     perfil = pd.Series("", index=df.index)
-    perfil[perfil_b] = PERFIL_B
-    perfil[perfil_c] = PERFIL_C
+    perfil[falta_oferta] = PERFIL_OFERTA
+    perfil[falta_demanda] = PERFIL_DEMANDA
     return perfil
 
 
-def _motivo_farming(fila) -> str:
-    """Fortaleza + brecha con los datos del seller. Ej:
-    'Fortaleza: venta P85 ($12.300.000). Brecha: 35% de SKUs con stock (P22).'"""
-    dureza = fila["division_db"]
-    venta = f"venta {_pct(fila['venta_percentil'])} ({_pesos(fila['venta'])})"
-    cvr = f"CVR {_pct(fila['percentil_cvr'])} ({_texto(fila['cvr_seller'])})"
-    stock = f"{_texto(fila['pct_con_stock'])} de SKUs con stock ({_pct(fila['percentil_stock'])})"
-    volumen = f"{_num(fila['sku_stock'])} SKUs con stock ({_pct(fila['percentil_volumen_stock'])})"
+def _pct_redondo(x, decimales: int = 0) -> str:
+    """'58.12%' -> '58%' | '0.44%' con 2 decimales -> '0,44%'. Si no se puede leer, lo deja como viene."""
+    try:
+        valor = float(str(x).replace('%', '').replace(',', '.'))
+    except ValueError:
+        return _texto(x)
+    return f"{valor:.{decimales}f}%".replace(".", ",")
 
-    if fila["perfil_farming"] == PERFIL_B:
-        fuertes = [t for t, ok in [(venta, fila["venta_percentil"] >= UMBRAL_FORTALEZA),
-                                   (cvr, fila["percentil_cvr"] >= UMBRAL_FORTALEZA)] if ok]
-        brechas = [t for t, ok in [(stock, fila["percentil_stock"] < UMBRAL_BRECHA_OFERTA),
-                                   (volumen, fila["percentil_volumen_stock"] < UMBRAL_BRECHA_OFERTA)] if ok]
-    elif fila["perfil_farming"] == PERFIL_C:
-        fuertes = [stock, volumen]
-        brechas = [t for t, ok in [(venta, fila["venta_percentil"] < UMBRAL_BRECHA_DEMANDA),
-                                   (cvr, fila["percentil_cvr"] < UMBRAL_BRECHA_DEMANDA)] if ok]
+
+def _motivo_farming(fila) -> str:
+    """Frase para el AM: que tiene el seller (fortaleza) y que le falta (brecha).
+    Cada dato va con su nombre para no confundir las dos variables de stock:
+      disponibilidad = SKU con stock (% del catalogo con stock)
+      volumen        = Volumen SKU (cantidad de productos con stock)
+    Ej: 'Tiene oferta: buena disponibilidad (58% de su catalogo tiene stock, P60) y buen
+         volumen (247 productos con stock, P93). Le falta demanda: baja conversion
+         (0,44% de las visitas termina en compra, P39). Percentiles frente a sellers blandos.'"""
+    dureza = fila["division_db"]
+    venta = f"({_pesos(fila['venta'])} en {HORIZONTE_DIARIO} días, {_pct(fila['venta_percentil'])})"
+    cvr = f"({_pct_redondo(fila['cvr_seller'], 2)} de las visitas termina en compra, {_pct(fila['percentil_cvr'])})"
+    disponibilidad = (f"({_pct_redondo(fila['pct_con_stock'])} de su catálogo tiene stock, "
+                      f"{_pct(fila['percentil_stock'])})")
+    volumen = f"({_num(fila['sku_stock'])} productos con stock, {_pct(fila['percentil_volumen_stock'])})"
+
+    if fila["perfil_farming"] == PERFIL_OFERTA:
+        fuertes = [t for t, ok in [(f"buena venta {venta}", fila["venta_percentil"] >= UMBRAL_FORTALEZA),
+                                   (f"buena conversión {cvr}", fila["percentil_cvr"] >= UMBRAL_FORTALEZA)] if ok]
+        brechas = [t for t, ok in [(f"baja disponibilidad {disponibilidad}",
+                                    fila["percentil_stock"] < UMBRAL_BRECHA_OFERTA),
+                                   (f"poco volumen {volumen}",
+                                    fila["percentil_volumen_stock"] < UMBRAL_BRECHA_OFERTA)] if ok]
+        texto = f"Tiene demanda: {' y '.join(fuertes)}. Le falta oferta: {' y '.join(brechas)}."
+    elif fila["perfil_farming"] == PERFIL_DEMANDA:
+        brechas = [t for t, ok in [(f"baja venta {venta}", fila["venta_percentil"] < UMBRAL_BRECHA_DEMANDA),
+                                   (f"baja conversión {cvr}", fila["percentil_cvr"] < UMBRAL_BRECHA_DEMANDA)] if ok]
+        texto = (f"Tiene oferta: buena disponibilidad {disponibilidad} y buen volumen {volumen}. "
+                 f"Le falta demanda: {' y '.join(brechas)}.")
     else:
         return ""
-    return f"Fortaleza: {', '.join(fuertes)}. Brecha: {', '.join(brechas)}. (Percentiles en {dureza})"
+    return f"{texto} Percentiles frente a sellers {dureza}."
 
 
 def priorizar_farming(df: pd.DataFrame) -> pd.DataFrame:
     """Sellers con potencial para Farming, con perfil y prioridad dentro de su categoria."""
-    # marca de Regalo SP (contexto para el AM), antes de dejar una fila por seller
-    sp = filtrar_sp(df)
-    regla_sp = sp.set_index(["seller_id", "division_db"])["regla_sp"]
-
     base = una_fila_por_seller(df)
     elegible = (
         base["estado_seller"].isin(ESTADOS_FARMING)
@@ -176,8 +194,6 @@ def priorizar_farming(df: pd.DataFrame) -> pd.DataFrame:
 
     farm["motivo_farming"] = farm.apply(_motivo_farming, axis=1)
     farm["palanca_farming"] = farm["perfil_farming"].map(PALANCA_PERFIL)
-    farm["regla_sp"] = [regla_sp.get((s, d), "") for s, d in zip(farm["seller_id"], farm["division_db"])]
-    farm["regalo_sp"] = ["No" if r == "" else f"Si ({r})" for r in farm["regla_sp"]]
     farm["pts_para_subir_segmento"] = farm.apply(_pts_para_subir, axis=1)
 
     farm = farm.sort_values(["categoria", "venta"], ascending=[True, False])
@@ -212,7 +228,7 @@ def _escribir_detalle(wb, tabla: pd.DataFrame):
     left = Alignment(horizontal="left", vertical="center")
     thin = Side(style="thin", color="D9D9D9")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    color_perfil = {PERFIL_B: "DDEBF7", PERFIL_C: "FCE4D6"}   # azul claro / naranjo claro
+    color_perfil = {PERFIL_OFERTA: "DDEBF7", PERFIL_DEMANDA: "FCE4D6"}   # azul claro / naranjo claro
 
     formatos = {"venta": "$#,##0", "total_invertido": "$#,##0", "score": "0",
                 "venta_ult_30d": "$#,##0", "venta_30d_anterior": "$#,##0", "variacion_venta_30d": "0%",
@@ -253,10 +269,10 @@ def _escribir_resumen(wb, farm: pd.DataFrame):
     ws = wb.create_sheet(NOMBRE_HOJA_RESUMEN)
 
     tabla = pd.crosstab(farm["categoria"], farm["perfil_farming"])
-    for p in (PERFIL_B, PERFIL_C):
+    for p in (PERFIL_OFERTA, PERFIL_DEMANDA):
         if p not in tabla.columns:
             tabla[p] = 0
-    tabla = tabla[[PERFIL_B, PERFIL_C]]
+    tabla = tabla[[PERFIL_OFERTA, PERFIL_DEMANDA]]
     tabla["Total"] = tabla.sum(axis=1)
     venta = farm.groupby("categoria")["venta"].sum()
     tabla["Venta de estos sellers"] = venta.reindex(tabla.index)
@@ -265,12 +281,12 @@ def _escribir_resumen(wb, farm: pd.DataFrame):
     total.name = "Total"
     tabla = pd.concat([tabla, total.to_frame().T])
 
-    cols = ["Categoría", f"{PERFIL_B} (B)", f"{PERFIL_C} (C)", "Total", "Venta de estos sellers"]
+    cols = ["Categoría", PERFIL_OFERTA, PERFIL_DEMANDA, "Total", "Venta de estos sellers"]
     _estilo_encabezado(ws, cols)
     cell_font = Font(name="Arial", size=10)
     bold = Font(name="Arial", size=10, bold=True)
     for i, (cat, fila) in enumerate(tabla.iterrows(), start=2):
-        valores = [cat, fila[PERFIL_B], fila[PERFIL_C], fila["Total"], fila["Venta de estos sellers"]]
+        valores = [cat, fila[PERFIL_OFERTA], fila[PERFIL_DEMANDA], fila["Total"], fila["Venta de estos sellers"]]
         for j, val in enumerate(valores, start=1):
             c = ws.cell(row=i, column=j, value=val.item() if hasattr(val, "item") else val)
             c.font = bold if cat == "Total" else cell_font
@@ -292,8 +308,8 @@ def escribir_hoja_farming(df: pd.DataFrame, path: str = "score_growth.xlsx") -> 
 
     print(f"Hojas '{NOMBRE_HOJA}' y '{NOMBRE_HOJA_RESUMEN}' agregadas: "
           f"{len(farm)} sellers con potencial "
-          f"({(farm['perfil_farming'] == PERFIL_B).sum()} {PERFIL_B}, "
-          f"{(farm['perfil_farming'] == PERFIL_C).sum()} {PERFIL_C})")
+          f"({(farm['perfil_farming'] == PERFIL_OFERTA).sum()} {PERFIL_OFERTA}, "
+          f"{(farm['perfil_farming'] == PERFIL_DEMANDA).sum()} {PERFIL_DEMANDA})")
     resumen_farming(farm)
     return farm
 
