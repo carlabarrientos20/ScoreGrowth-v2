@@ -275,14 +275,20 @@ La hoja *Resumen* muestra todas las banderas activas (`flags`), cuántas son (`n
 
 | | Regla A - Dormant | Regla B - Activo |
 |---|---|---|
-| Segmento | Medio - Alto o Medio | Alto o Medio - Alto |
+| Segmento | Medio - Alto, Medio o Bajo | Alto o Medio - Alto |
 | Estado | Dormant | Activo |
 | Tramos con venta | ≥ 2 de 3 | 3 de 3 |
 | Percentil CVR | — | ≥ 60 |
 | SKUs creados | ≥ 5 | ≥ 5 |
 | Reputación | Medio, Bueno, Destacado o Plan Growth | Medio, Bueno, Destacado o Plan Growth |
 
-**Personalizado BD:** segmento Alto, estado Activo y reputación Bueno, Destacado o Plan Growth.
+**Personalizado BD:** cumple la Regla A o la Regla B (columna `regla_bd`).
+
+| | Regla A - Activo | Regla B - Dormant |
+|---|---|---|
+| Segmento | Alto | Medio - Alto |
+| Estado | Activo | Dormant |
+| Reputación | Bueno, Destacado o Plan Growth | Bueno o Plan Growth |
 
 Los parámetros están al inicio de `Tratamiento.py`.
 

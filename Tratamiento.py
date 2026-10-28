@@ -15,7 +15,7 @@ en Recurrencia_venta.py.
 Regalo SP  (basta cumplir Regla A O Regla B):
 
   Regla A - Dormant:
-    segmento in {Medio - Alto, Medio}
+    segmento in {Medio - Alto, Medio, Bajo}
     estado_seller == Dormant
     tramos_con_venta >= 2        (vendio en 2 de 3 tramos; antes "2 de 3 meses")
     sku_creados >= 5
@@ -29,10 +29,17 @@ Regalo SP  (basta cumplir Regla A O Regla B):
     sku_creados >= 5
     categoria_reputacion in {Medio, Bueno, Destacado, Plan Growth}
 
-Personalizado BD:
+Personalizado BD  (basta cumplir Regla A O Regla B):
+
+  Regla A - Activo:
     segmento == Alto
     estado_seller == Activo
     categoria_reputacion in {Bueno, Destacado, Plan Growth}
+
+  Regla B - Dormant:
+    segmento == Medio - Alto
+    estado_seller == Dormant
+    categoria_reputacion in {Bueno, Plan Growth}
 """
 
 import pandas as pd
@@ -44,6 +51,8 @@ from openpyxl.utils import get_column_letter
 # ---- parametros de los criterios (editar aca si cambian) ----
 REPUTACION_OK = ["Bueno", "Destacado", "Plan Growth"]
 REPUTACION_SP = ["Medio","Bueno", "Destacado", "Plan Growth"]
+REPUTACION_BD_DORMANT = ["Bueno", "Plan Growth"]
+SEGMENTOS_SP_DORMANT = ["Medio - Alto", "Medio", "Bajo"]   # Regla A de Regalo SP
 SKU_MIN = 5
 TRAMOS_MIN_DORMANT = 2   # vendio en al menos 2 de los 3 tramos del horizonte
 TRAMOS_MIN_ACTIVO = 3    # vendio en los 3 tramos del horizonte
@@ -66,7 +75,7 @@ def filtrar_sp(df: pd.DataFrame) -> pd.DataFrame:
 
     # Regla A - Dormant
     regla_a = (
-        df["segmento"].isin(["Medio - Alto", "Medio"])
+        df["segmento"].isin(SEGMENTOS_SP_DORMANT)
         & (df["estado_seller"] == "Dormant")
         & (df["tramos_con_venta"] >= TRAMOS_MIN_DORMANT)
         & sku_ok
@@ -92,12 +101,23 @@ def filtrar_sp(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def filtrar_bd(df: pd.DataFrame) -> pd.DataFrame:
-    """Sellers con tratamiento personalizado (Business Development)."""
-    bd = df[
+    """Sellers con tratamiento personalizado (Business Development): Regla A o Regla B."""
+    # Regla A - Activo Alto
+    regla_a = (
         (df["segmento"] == "Alto")
         & (df["estado_seller"] == "Activo")
         & (df["categoria_reputacion"].isin(REPUTACION_OK))
-    ].copy()
+    )
+    # Regla B - Dormant Medio - Alto
+    regla_b = (
+        (df["segmento"] == "Medio - Alto")
+        & (df["estado_seller"] == "Dormant")
+        & (df["categoria_reputacion"].isin(REPUTACION_BD_DORMANT))
+    )
+    bd = df[regla_a | regla_b].copy()
+    bd["regla_bd"] = ""
+    bd.loc[regla_a[bd.index], "regla_bd"] = "A-Activo"
+    bd.loc[regla_b[bd.index], "regla_bd"] = "B-Dormant"
     return bd
 
 
@@ -158,7 +178,7 @@ def escribir_hojas_tratamiento(df: pd.DataFrame, path: str = "score_growth.xlsx"
 
     wb = load_workbook(path)
     _escribir_hoja(wb, "Regalo SP", sp, extra_cols=["regla_sp"])
-    _escribir_hoja(wb, "Personalizado BD", bd)
+    _escribir_hoja(wb, "Personalizado BD", bd, extra_cols=["regla_bd"])
     wb.save(path)
 
     print(f"\nResumen tratamientos:")
