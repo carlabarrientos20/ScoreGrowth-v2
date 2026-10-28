@@ -173,22 +173,22 @@ Los percentiles se calculan con `PERCENT_RANK` **dentro de cada dureza**, redond
 
 ### Contexto: Estado del seller (`Variables/Estado.py`)
 
-No entra al score. Clasifica a cada seller según el **último mes calendario cerrado**:
+No entra al score. Clasifica a cada seller según el **último mes calendario cerrado** y, si no vendió ese mes, revisa el **mes en curso**:
 
 | Estado | Definición |
 |---|---|
-| Primera venta | Su primera venta histórica fue en el último mes cerrado |
+| Primera venta | Su primera venta histórica fue en el último mes cerrado o en el mes en curso |
 | Activo | Vendió el último mes cerrado y también el anterior |
-| Reactivado | Vendió el último mes cerrado, pero no el anterior |
-| Dormant | No vendió el último mes cerrado; última venta hace 1-2 meses |
+| Reactivado | Vendió el último mes cerrado pero no el anterior, o no vendió el último mes cerrado pero volvió a vender en el mes en curso |
+| Dormant | No vendió el último mes cerrado ni en lo que va del mes en curso; última venta hace 1-2 meses |
 | Fugado | Última venta hace 3-6 meses |
 | Out <12 / Out >12 | Última venta hace 6-12 / más de 12 meses |
 | Sin venta / Ghost | Nunca vendió (con SKUs / sin SKUs) |
 
 - **Se usa en:** frecuencia neutra para Primera venta (score), Regla A (Dormant), Regla B y Personalizado BD (Activo).
 - **Limitaciones:**
-  - Usa meses calendario mientras el resto usa días móviles. Un seller "Dormant" puede tener ventas en el mes en curso.
-  - Un seller que vende por primera vez en el mes en curso queda como **Dormant**, no como Primera venta.
+  - Usa meses calendario mientras el resto usa días móviles.
+  - **El resultado depende del día en que se corre.** Corrido el día 1, el mes en curso casi no tiene ventas y Dormant = "no vendió el mes pasado". Corrido a fin de mes, los que ya volvieron a vender pasan a Reactivado (el 27-10-2026 eran 373 de 516 Dormant). Esto mueve las reglas de Regalo SP y Personalizado BD que usan Dormant, por eso conviene correrlo siempre el día 1.
   - Fugado, Out, Sin venta y Ghost nunca aparecen en la salida porque esos sellers no tienen ventas en los últimos 90 días.
 
 ### Contexto: Reputación (`Variables/Reputacion.py`)

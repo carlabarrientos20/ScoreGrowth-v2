@@ -13,9 +13,15 @@ Sellers que SI vendieron en el mes de referencia:
   - Activo:           venia vendiendo seguido (tambien vendio el mes anterior).
   - Reactivado:       vendio ese mes pero venia de un hueco (no vendio el mes anterior).
 
-Sellers que NO vendieron en el mes de referencia (apagados, por antiguedad
-de su ultima venta):
-  - Dormant:  ultima venta hace 1-2 meses.
+Sellers que NO vendieron en el mes de referencia, pero SI en el mes en curso:
+  - Primera venta:    su primera venta es del mes en curso.
+  - Reactivado:       volvio a vender este mes despues de un hueco.
+  (Si el score se corre el dia 1 del mes, el mes en curso casi no tiene ventas
+   y este caso practicamente no aparece.)
+
+Sellers que NO vendieron ni en el mes de referencia ni en el mes en curso
+(apagados, por antiguedad de su ultima venta):
+  - Dormant:  ultima venta hace 1-2 meses (no vendio el ultimo mes o dos).
   - Fugado:   ultima venta hace 3-6 meses.
   - Out <12:  ultima venta hace 6-12 meses.
   - Out >12:  ultima venta hace +12 meses.
@@ -31,10 +37,11 @@ WITH mm AS (
     WHERE tier = 'Mid-Market'
 ),
 params AS (
-    -- mes_sel = ultimo mes cerrado; mes_ant = el anterior a ese
+    -- mes_sel = ultimo mes cerrado; mes_ant = el anterior a ese; mes_act = mes en curso
     SELECT
         DATEADD(month, -1, DATE_TRUNC('month', CURRENT_DATE)) AS mes_sel,
-        DATEADD(month, -2, DATE_TRUNC('month', CURRENT_DATE)) AS mes_ant
+        DATEADD(month, -2, DATE_TRUNC('month', CURRENT_DATE)) AS mes_ant,
+        DATE_TRUNC('month', CURRENT_DATE) AS mes_act
 ),
 ventas_por_mes AS (
     SELECT
@@ -50,7 +57,8 @@ resumen AS (
         MIN(vpm.mes_venta) AS primera_venta,
         MAX(vpm.mes_venta) AS ultima_venta,
         MAX(CASE WHEN vpm.mes_venta = p.mes_sel THEN 1 ELSE 0 END) AS vendio_sel,
-        MAX(CASE WHEN vpm.mes_venta = p.mes_ant THEN 1 ELSE 0 END) AS vendio_ant
+        MAX(CASE WHEN vpm.mes_venta = p.mes_ant THEN 1 ELSE 0 END) AS vendio_ant,
+        MAX(CASE WHEN vpm.mes_venta = p.mes_act THEN 1 ELSE 0 END) AS vendio_act
     FROM ventas_por_mes vpm
     CROSS JOIN params p
     GROUP BY vpm.seller_id
@@ -74,7 +82,10 @@ SELECT
         WHEN r.vendio_sel = 1 AND r.primera_venta = p.mes_sel THEN 'Primera venta'
         WHEN r.vendio_sel = 1 AND r.vendio_ant = 1 THEN 'Activo'
         WHEN r.vendio_sel = 1 AND r.vendio_ant = 0 THEN 'Reactivado'
-        -- --- NO vendieron en el mes de referencia (apagados) ---
+        -- --- no vendieron en el mes de referencia, pero SI en el mes en curso ---
+        WHEN r.vendio_act = 1 AND r.primera_venta = p.mes_act THEN 'Primera venta'
+        WHEN r.vendio_act = 1 THEN 'Reactivado'
+        -- --- NO vendieron ni en el mes de referencia ni en el mes en curso (apagados) ---
         WHEN r.ultima_venta >= DATEADD(month, -2, p.mes_sel)  THEN 'Dormant'
         WHEN r.ultima_venta >= DATEADD(month, -6, p.mes_sel)  THEN 'Fugado'
         WHEN r.ultima_venta >= DATEADD(month, -12, p.mes_sel) THEN 'Out <12'
