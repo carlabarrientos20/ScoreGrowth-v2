@@ -185,7 +185,7 @@ No entra al score. Clasifica a cada seller según el **último mes calendario ce
 | Out <12 / Out >12 | Última venta hace 6-12 / más de 12 meses |
 | Sin venta / Ghost | Nunca vendió (con SKUs / sin SKUs) |
 
-- **Se usa en:** frecuencia neutra para Primera venta (score), Regla A (Dormant), Regla B y Personalizado BD (Activo).
+- **Se usa en:** frecuencia neutra para Primera venta (score); Dormant en la Regla A de Regalo SP y la Regla B de Personalizado BD; Activo en la Regla B de Regalo SP y la Regla A de Personalizado BD; filtro de Farming (Activo, Reactivado o Dormant).
 - **Limitaciones:**
   - Usa meses calendario mientras el resto usa días móviles.
   - **El resultado depende del día en que se corre.** Corrido el día 1, el mes en curso casi no tiene ventas y Dormant = "no vendió el mes pasado". Corrido a fin de mes, los que ya volvieron a vender pasan a Reactivado (el 27-10-2026 eran 373 de 516 Dormant). Esto mueve las reglas de Regalo SP y Personalizado BD que usan Dormant, por eso conviene correrlo siempre el día 1.
