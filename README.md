@@ -341,7 +341,7 @@ Los umbrales de brecha son los mismos de las banderas (P60 para stock y volumen,
 
 **Parámetros** (al inicio de `Farming.py`): filtros básicos (`ESTADOS_FARMING`, `REPUTACION_FARMING`, `SKU_MIN_FARMING`), umbral de fortaleza (`UMBRAL_FORTALEZA = 60`), palancas por perfil (`PALANCA_PERFIL`) y `POOL_POR_CATEGORIA`. Con `POOL_POR_CATEGORIA = 30`, por ejemplo, la hoja deja solo los 30 primeros de cada categoría. Con `None` muestra a todos.
 
-Con los datos del 27-10-2026 había **≈ 1.150 sellers con potencial**: ≈ 860 Falta oferta y ≈ 290 Falta demanda (≈ 140 Alto, ≈ 630 Medio - Alto, ≈ 300 Medio y ≈ 80 Bajo).
+Con la corrida del 27-10-2026 había **1.147 sellers con potencial**: 847 Falta oferta y 300 Falta demanda (142 Alto, 625 Medio - Alto, 297 Medio y 83 Bajo). Suman $3.594 MM de venta en 90 días, cerca del 63% de la venta Mid-Market.
 
 **Cadencia sugerida:** correr el score el primero de cada mes y que los AM trabajen el pool por semanas, de arriba hacia abajo. Al mes siguiente se compara a los contactados contra la foto anterior. Conviene comparar valores absolutos (% de SKUs con stock, SKUs, venta en $) y no percentiles, y contra sellers no contactados, porque la estacionalidad (Black Friday, Navidad) mueve a todos.
 
@@ -377,7 +377,21 @@ Con los datos del 27-10-2026 había **≈ 1.150 sellers con potencial**: ≈ 860
 | `UMBRAL_TENDENCIA` | 0,2 | ±20% separa Subiendo / Estable / Bajando |
 | `HORIZONTE_MESES` | 3 | Ya no se usa |
 
-Los pesos están en `Scoring.py`. Los cortes de segmento y los umbrales de las banderas están en `Perfil.py`. Los criterios de tratamiento están en `Tratamiento.py`.
+### Dónde se cambia cada parámetro
+
+| Qué | Archivo | Constante(s) | Valor actual |
+|---|---|---|---|
+| Horizonte, onboarding y tramos | `config.py` | `HORIZONTE_DIARIO`, `DIAS_ONBOARDING`, `TRAMOS_TOTALES` | 90 días, 90 días, 3 |
+| Tendencia de venta | `config.py` | `DIAS_TENDENCIA`, `UMBRAL_TENDENCIA` | 30 días, ±20% |
+| Pesos del score | `Scoring.py` | `PESO_VENTA`, `PESO_DISPONIBILIDAD_SKU`, `PESO_VOLUMEN_SKU`, `PESO_RECURRENCIA`, `PESO_CVR`, `PESO_INVERSION` | 0,30 / 0,20 / 0,10 / 0,15 / 0,15 / 0,10 |
+| Valor neutro (CVR sin visitas, Primera venta) | `Scoring.py` | `VALOR_NEUTRO` | 50 |
+| Cortes de segmento | `Perfil.py` | `CORTE_ALTO`, `CORTE_MEDIO_ALTO`, `CORTE_MEDIO` | 68 / 46 / 32 |
+| Variables débiles | `Perfil.py` | `UMBRAL_PERCENTIL` (venta, CVR), `UMBRAL_PERCENTIL_SKU` (stock, volumen), `UMBRAL_TRAMOS` (frecuencia) | P40 / P60 / 2 de 3 tramos |
+| Regalo SP | `Tratamiento.py` | `SEGMENTOS_SP_DORMANT`, `REPUTACION_SP`, `SKU_MIN`, `TRAMOS_MIN_DORMANT`, `TRAMOS_MIN_ACTIVO`, `PERCENTIL_CVR_MIN` | Medio - Alto, Medio y Bajo / no Bajo / 5 / 2 / 3 / P60 |
+| Personalizado BD | `Tratamiento.py` | `REPUTACION_OK` (Regla A), `REPUTACION_BD_DORMANT` (Regla B) | Bueno, Destacado, Plan Growth / Bueno, Plan Growth |
+| Farming: filtros básicos | `Farming.py` | `ESTADOS_FARMING`, `REPUTACION_FARMING`, `SKU_MIN_FARMING` | Activo, Reactivado, Dormant / no Bajo / 5 |
+| Farming: perfiles | `Farming.py` | `UMBRAL_FORTALEZA`, `UMBRAL_BRECHA_OFERTA`, `UMBRAL_BRECHA_DEMANDA`, `PALANCA_PERFIL` | P60 / P60 / P40 / palancas por perfil |
+| Farming: tamaño del pool | `Farming.py` | `UMBRAL_FORTALEZA` (subir la exigencia) o `POOL_POR_CATEGORIA` (límite fijo) | P60 / sin límite |
 
 ### Clasificación de divisiones
 
@@ -420,6 +434,19 @@ El repo anterior ya había pasado de 3 meses calendario a días móviles. La v2 
 | CVR | Ventana de 91 días; sin visitas = 0 | Ventana de 90 días; sin visitas = 50 (neutro) |
 | Cortes de segmento | 70 / 53 / 37 | 68 / 46 / 32 |
 | Conexión | Sin reintentos | Hasta 3 reintentos ante cortes de red |
+
+Además, la v2 agrega:
+
+| Tema | Qué se agregó |
+|---|---|
+| Categoría del seller | `Variables/Categoria.py`: división con más SKUs, para asignar cada seller a un AM |
+| Priorización de farming | `Farming.py`: perfiles Falta oferta y Falta demanda, motivo y palanca por seller, hojas *Priorización de farming* y *Resumen farming* |
+| Variable débil y motivo | Columnas `variable_debil` y `motivo` en la hoja *Resumen* |
+| Tendencia de venta | `Variables/Tendencia.py`: últimos 30 días frente a los 30 anteriores |
+| Estado del seller | Si no vendió el mes pasado pero sí en el mes en curso, pasa a Reactivado (antes quedaba Dormant) |
+| Personalizado BD | Regla B: Dormant Medio - Alto con reputación Bueno o Plan Growth (columna `regla_bd`) |
+| Regalo SP | La Regla A (Dormant) incluye también el segmento Bajo |
+| Onboarding en Inversión | `Inversion.py` usa `DIAS_ONBOARDING` en vez de un 90 fijo |
 
 ---
 
